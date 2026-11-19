@@ -21,11 +21,11 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
   if (savedBooks.length === 0) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center p-6 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-stone-100 text-stone-400">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-stone-100 dark:bg-slate-800 text-stone-400 dark:text-slate-500">
           <Bookmark className="h-8 w-8 stroke-1" />
         </div>
-        <h3 className="mt-4 text-base font-bold text-stone-800">Rak Buku Masih Kosong</h3>
-        <p className="mt-1 max-w-sm text-xs text-stone-500">
+        <h3 className="mt-4 text-base font-bold text-stone-800 dark:text-slate-200">Rak Buku Masih Kosong</h3>
+        <p className="mt-1 max-w-sm text-xs text-stone-500 dark:text-slate-400">
           Simpan buku pelajaran atau novel favorit Anda untuk membacanya kembali kapan saja tanpa kehilangan jejak.
         </p>
       </div>
@@ -36,15 +36,15 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
     <div className="pb-12">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-[#1A1A1A]">Rak Buku Saya</h2>
-          <p className="text-xs text-stone-500">
+          <h2 className="text-xl font-bold text-[#1A1A1A] dark:text-white">Rak Buku Saya</h2>
+          <p className="text-xs text-stone-500 dark:text-slate-400">
             Tersimpan {savedBooks.length} buku di perangkat ini
           </p>
         </div>
 
         <button
           onClick={onClearShelf}
-          className="flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+          className="flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span>Kosongkan Rak</span>
@@ -64,7 +64,7 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
                 e.stopPropagation();
                 onRemoveFromShelf(book);
               }}
-              className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-stone-400 shadow-sm hover:text-rose-600 transition"
+              className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-slate-800/90 text-stone-400 dark:text-slate-400 shadow-sm hover:text-rose-600 dark:hover:text-rose-400 transition"
               title="Hapus dari Rak"
             >
               <Trash2 className="h-3.5 w-3.5" />

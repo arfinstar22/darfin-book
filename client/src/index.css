@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     --paper-bg: #FDFBF7;
@@ -12,8 +14,17 @@
     --brand-gold: #D4AF37;
   }
 
+  .dark {
+    --paper-bg: #080E1E;
+    --paper-card: #0F172A;
+    --paper-border: #1E293B;
+    --ink-primary: #F1F5F9;
+    --ink-secondary: #94A3B8;
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
@@ -33,6 +44,6 @@
 }
 
 .theme-dark {
-  background-color: #121826;
+  background-color: #080E1E;
   color: #E2E8F0;
 }

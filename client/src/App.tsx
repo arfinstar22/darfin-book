@@ -26,6 +26,37 @@ export const App: React.FC = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [freeOnly, setFreeOnly] = useState(false);
 
+  // Dark Mode State
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    try {
+      const savedTheme = localStorage.getItem('darfin_dark_mode');
+      if (savedTheme !== null) {
+        return savedTheme === 'true';
+      }
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  // Sync dark mode class to html element
+  useEffect(() => {
+    try {
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      localStorage.setItem('darfin_dark_mode', String(isDarkMode));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [isDarkMode]);
+
+  const handleToggleDarkMode = () => {
+    setIsDarkMode((prev) => !prev);
+  };
+
   // Curated Shelves for Home
   const [shelves, setShelves] = useState<CuratedShelf[]>([]);
   const [loadingShelves, setLoadingShelves] = useState(true);
@@ -144,7 +175,7 @@ export const App: React.FC = () => {
     );
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] text-[#1A1A1A] pb-20 sm:pb-8">
+    <div className="min-h-screen bg-[#FDFBF7] dark:bg-[#080E1E] text-[#1A1A1A] dark:text-[#E2E8F0] pb-20 sm:pb-8 transition-colors duration-200">
       {/* Navbar */}
       <Navbar
         searchQuery={searchQuery}
@@ -152,6 +183,8 @@ export const App: React.FC = () => {
         onSearchSubmit={handleSearchSubmit}
         freeOnly={freeOnly}
         onToggleFreeOnly={handleToggleFreeOnly}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={handleToggleDarkMode}
       />
 
       {/* Main Content Area */}
@@ -163,7 +196,7 @@ export const App: React.FC = () => {
             {isSearching && (
               <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-[#0D9488]" />
-                <span className="text-sm font-medium text-stone-600">
+                <span className="text-sm font-medium text-stone-600 dark:text-slate-300">
                   Mencari buku berbahasa Indonesia...
                 </span>
               </div>
@@ -172,12 +205,12 @@ export const App: React.FC = () => {
             {/* Search Results Display */}
             {!isSearching && searchResults !== null && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-[#E8E5DF] pb-3">
+                <div className="flex items-center justify-between border-b border-[#E8E5DF] dark:border-slate-800 pb-3">
                   <div>
-                    <h2 className="text-lg font-bold text-[#1A1A1A]">
+                    <h2 className="text-lg font-bold text-[#1A1A1A] dark:text-white">
                       Hasil Pencarian: &ldquo;{searchQuery}&rdquo;
                     </h2>
-                    <p className="text-xs text-stone-500">
+                    <p className="text-xs text-stone-500 dark:text-slate-400">
                       Ditemukan {searchResults.length} buku terverifikasi bahasa Indonesia
                     </p>
                   </div>
@@ -187,7 +220,7 @@ export const App: React.FC = () => {
                       setSearchResults(null);
                       setSearchQuery('');
                     }}
-                    className="text-xs font-semibold text-[#0D9488] hover:underline"
+                    className="text-xs font-semibold text-[#0D9488] dark:text-teal-400 hover:underline"
                   >
                     Kembali ke Beranda
                   </button>
@@ -195,11 +228,11 @@ export const App: React.FC = () => {
 
                 {searchResults.length === 0 ? (
                   <div className="flex min-h-[30vh] flex-col items-center justify-center p-8 text-center">
-                    <Search className="h-10 w-10 text-stone-400 stroke-1" />
-                    <h3 className="mt-3 text-base font-bold text-stone-800">
+                    <Search className="h-10 w-10 text-stone-400 dark:text-slate-500 stroke-1" />
+                    <h3 className="mt-3 text-base font-bold text-stone-800 dark:text-slate-200">
                       Buku Tidak Ditemukan
                     </h3>
-                    <p className="mt-1 max-w-md text-xs text-stone-500">
+                    <p className="mt-1 max-w-md text-xs text-stone-500 dark:text-slate-400">
                       Coba cari dengan kata kunci lain (contoh: &ldquo;matematika&rdquo;, &ldquo;cerita rakyat&rdquo;, atau nama penulis).
                     </p>
                   </div>
@@ -222,7 +255,7 @@ export const App: React.FC = () => {
             {!isSearching && searchResults === null && (
               <div className="space-y-10">
                 {/* Hero Editorial Card */}
-                <section className="relative overflow-hidden rounded-3xl bg-[#0B132B] p-6 text-white sm:p-10 shadow-lg">
+                <section className="relative overflow-hidden rounded-3xl bg-[#0B132B] dark:bg-slate-900/90 border dark:border-slate-800 p-6 text-white sm:p-10 shadow-lg">
                   <div className="relative z-10 max-w-xl">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-500/20 px-3 py-1 text-xs font-semibold text-teal-300 backdrop-blur-xs">
                       <Sparkles className="h-3.5 w-3.5 text-teal-400" />
@@ -266,17 +299,17 @@ export const App: React.FC = () => {
                 {/* Curated Shelves Section */}
                 {loadingShelves ? (
                   <div className="flex h-32 items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
+                    <Loader2 className="h-6 w-6 animate-spin text-stone-400 dark:text-slate-500" />
                   </div>
                 ) : (
                   shelves.map((shelf) => (
                     <section key={shelf.id} className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h2 className="text-lg font-bold text-[#1A1A1A]">
+                          <h2 className="text-lg font-bold text-[#1A1A1A] dark:text-white">
                             {shelf.title}
                           </h2>
-                          <p className="text-xs text-stone-500">{shelf.subtitle}</p>
+                          <p className="text-xs text-stone-500 dark:text-slate-400">{shelf.subtitle}</p>
                         </div>
 
                         <button
@@ -284,7 +317,7 @@ export const App: React.FC = () => {
                             setSearchQuery(shelf.id.includes('pelajaran') ? 'pelajaran' : 'cerita');
                             handleSearch(shelf.id.includes('pelajaran') ? 'pelajaran' : 'cerita', true);
                           }}
-                          className="flex items-center gap-1 text-xs font-semibold text-[#0D9488] hover:underline"
+                          className="flex items-center gap-1 text-xs font-semibold text-[#0D9488] dark:text-teal-400 hover:underline"
                         >
                           <span>Lihat Semua</span>
                           <ChevronRight className="h-4 w-4" />
@@ -332,7 +365,11 @@ export const App: React.FC = () => {
 
         {/* Tab: Akun */}
         {currentTab === 'account' && (
-          <AccountView onClearAllData={handleClearAllData} />
+          <AccountView
+            onClearAllData={handleClearAllData}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+          />
         )}
       </main>
 

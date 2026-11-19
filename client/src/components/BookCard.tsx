@@ -14,25 +14,25 @@ export const getAccessBadge = (status: AccessStatus) => {
     case 'FULL_ACCESS':
       return {
         label: 'Akses Penuh',
-        color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        color: 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
         icon: CheckCircle2,
       };
     case 'BORROW_AVAILABLE':
       return {
         label: 'Bisa Dipinjam',
-        color: 'bg-sky-50 text-sky-700 border-sky-200',
+        color: 'bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800',
         icon: Clock,
       };
     case 'PREVIEW':
       return {
         label: 'Pratinjau',
-        color: 'bg-amber-50 text-amber-700 border-amber-200',
+        color: 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
         icon: Eye,
       };
     default:
       return {
         label: 'Info Saja',
-        color: 'bg-stone-100 text-stone-600 border-stone-200',
+        color: 'bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-slate-300 border-stone-200 dark:border-slate-700',
         icon: Info,
       };
   }
@@ -54,11 +54,11 @@ export const BookCard: React.FC<BookCardProps> = ({
   return (
     <div
       onClick={() => onSelect(book)}
-      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#E8E5DF] bg-white p-3.5 shadow-xs transition duration-200 hover:-translate-y-1 hover:border-[#D0CBBF] hover:shadow-md cursor-pointer"
+      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-[#E8E5DF] dark:border-slate-800 bg-white dark:bg-[#0F172A] p-3.5 shadow-xs transition duration-200 hover:-translate-y-1 hover:border-[#D0CBBF] dark:hover:border-slate-700 hover:shadow-md cursor-pointer"
     >
       <div>
         {/* Cover Aspect Ratio Container */}
-        <div className="relative mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl shadow-xs">
+        <div className="relative mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl shadow-xs bg-[#F4EFEA] dark:bg-slate-900">
           <BookCoverVisual book={book} />
 
           {/* Access Status Pill */}
@@ -73,16 +73,16 @@ export const BookCard: React.FC<BookCardProps> = ({
         </div>
 
         {/* Title & Author */}
-        <h3 className="line-clamp-2 text-sm font-bold text-[#1A1A1A] group-hover:text-[#0D9488]">
+        <h3 className="line-clamp-2 text-sm font-bold text-[#1A1A1A] dark:text-slate-100 group-hover:text-[#0D9488] dark:group-hover:text-teal-400">
           {book.title}
         </h3>
-        <p className="mt-1 line-clamp-1 text-xs text-[#5A5A5A]">
+        <p className="mt-1 line-clamp-1 text-xs text-[#5A5A5A] dark:text-slate-400">
           {book.authors.join(', ')}
         </p>
       </div>
 
       {/* Meta Footer & Quick Action */}
-      <div className="mt-3 flex items-center justify-between border-t border-[#F0ECE1] pt-2.5 text-[11px] text-[#78716C]">
+      <div className="mt-3 flex items-center justify-between border-t border-[#F0ECE1] dark:border-slate-800/80 pt-2.5 text-[11px] text-[#78716C] dark:text-slate-400">
         <span>{book.publishedYear || 'Bahasa Indonesia'}</span>
 
         {isDirectReadable && onReadDirect ? (
@@ -92,12 +92,12 @@ export const BookCard: React.FC<BookCardProps> = ({
               e.stopPropagation();
               onReadDirect(book);
             }}
-            className="rounded-lg bg-[#0B132B] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[#0D9488]"
+            className="rounded-lg bg-[#0B132B] dark:bg-teal-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[#0D9488] dark:hover:bg-teal-500"
           >
             Baca
           </button>
         ) : (
-          <span className="text-[11px] font-medium text-[#0D9488]">Detail</span>
+          <span className="text-[11px] font-medium text-[#0D9488] dark:text-teal-400">Detail</span>
         )}
       </div>
     </div>
