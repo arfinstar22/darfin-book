@@ -2,6 +2,18 @@ import type { Book, CuratedShelf, ReaderResolution, UserProfile, BookmarkItem, R
 
 const API_BASE = '/api/v1';
 
+export async function getAuthConfigApi(): Promise<{ googleClientId: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/config`);
+    if (res.ok) {
+      return res.json();
+    }
+  } catch {
+    // fallback if offline or error
+  }
+  return { googleClientId: '' };
+}
+
 export async function loginWithGoogleApi(payload: {
   email?: string;
   name?: string;

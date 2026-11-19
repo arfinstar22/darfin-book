@@ -187,6 +187,13 @@ export async function buildServer() {
     return content;
   });
 
+  // Public auth configuration (e.g. Google Client ID for GIS SDK)
+  server.get('/api/v1/auth/config', async () => {
+    return {
+      googleClientId: env.GOOGLE_CLIENT_ID || '',
+    };
+  });
+
   // Google / Gmail Authentication
   server.post('/api/v1/auth/google', async (request, reply) => {
     const body = request.body as {
