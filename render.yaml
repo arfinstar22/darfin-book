@@ -4,29 +4,29 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: pnpm install && pnpm build
-    startCommand: pnpm start
+    buildCommand: npm install -g pnpm && pnpm install && pnpm build
+    startCommand: node dist/server.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
-        value: production
+        value: "production"
       - key: APP_NAME
-        value: DARFIN BOOK
+        value: "DARFIN BOOK"
       - key: APP_LOCALE
-        value: id-ID
+        value: "id-ID"
       - key: DEFAULT_BOOK_LANGUAGE
-        value: id
+        value: "id"
       - key: STRICT_INDONESIAN_CATALOG
         value: "true"
       - key: DATABASE_PATH
-        value: ./data/darfin_book.db
+        value: "./data/darfin_book.db"
       - key: OPEN_LIBRARY_USER_AGENT
-        value: DarfinBook/1.0 (contact: support@darfinbook.id)
+        value: "DarfinBook/1.0 (contact: support@darfinbook.id)"
       - key: OPEN_LIBRARY_CONTACT_EMAIL
-        value: support@darfinbook.id
+        value: "support@darfinbook.id"
       - key: WIKISOURCE_API_BASE_URL
-        value: https://id.wikisource.org/w/api.php
+        value: "https://id.wikisource.org/w/api.php"
       - key: JWT_SECRET
         generateValue: true
       - key: SESSION_SECRET
