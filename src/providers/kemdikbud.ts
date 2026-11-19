@@ -256,20 +256,33 @@ export class KemdikbudProvider implements BookProvider {
 
   async search(query: BookSearchQuery): Promise<ProviderBook[]> {
     const q = query.query.toLowerCase().trim();
-    const matched = KEMDIKBUD_TEXTBOOKS.filter(
-      (b) =>
-        b.title.toLowerCase().includes(q) ||
-        b.subject.toLowerCase().includes(q) ||
-        b.grade.toLowerCase().includes(q) ||
-        b.level.toLowerCase().includes(q) ||
-        q.includes('pelajaran') ||
-        q.includes('sekolah') ||
-        q.includes('kemdikbud') ||
-        q.includes('bse') ||
-        q.includes('kurikulum')
-    );
+    const isBroad =
+      !q ||
+      q === '*' ||
+      q === 'all' ||
+      q === 'semua' ||
+      q.includes('pelajaran') ||
+      q.includes('sekolah') ||
+      q.includes('kemdikbud') ||
+      q.includes('bse') ||
+      q.includes('kurikulum') ||
+      q.includes('indonesia');
 
-    return matched.map((item) => {
+    const matched = isBroad
+      ? KEMDIKBUD_TEXTBOOKS
+      : KEMDIKBUD_TEXTBOOKS.filter(
+          (b) =>
+            b.title.toLowerCase().includes(q) ||
+            b.subject.toLowerCase().includes(q) ||
+            b.grade.toLowerCase().includes(q) ||
+            b.level.toLowerCase().includes(q)
+        );
+
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? 30;
+    const paged = matched.slice(offset, offset + limit);
+
+    return paged.map((item) => {
       const access: ProviderAccess = {
         status: 'FULL_ACCESS',
         readerMode: 'PROVIDER_READER',

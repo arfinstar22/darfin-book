@@ -158,19 +158,34 @@ export async function saveReadingProgressApi(
   });
 }
 
-export async function searchBooks(query: string, freeOnly = false): Promise<Book[]> {
+export interface SearchResultResponse {
+  books: Book[];
+  total: number;
+}
+
+export async function searchBooks(
+  query: string,
+  freeOnly = false,
+  limit = 30,
+  offset = 0
+): Promise<SearchResultResponse> {
   const url = new URL(`${API_BASE}/search`, window.location.origin);
   url.searchParams.set('q', query);
   if (freeOnly) {
     url.searchParams.set('freeOnly', 'true');
   }
+  url.searchParams.set('limit', limit.toString());
+  url.searchParams.set('offset', offset.toString());
 
   const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error('Gagal memuat hasil pencarian');
   }
   const data = await res.json();
-  return data.books || [];
+  return {
+    books: data.books || [],
+    total: typeof data.total === 'number' ? data.total : (data.books || []).length,
+  };
 }
 
 export async function getCuratedShelves(): Promise<CuratedShelf[]> {

@@ -12,6 +12,7 @@ import type {
 
 export class OpenLibraryProvider implements BookProvider {
   name = 'openlibrary';
+  lastTotalFound = 136920;
 
   private headers = {
     'User-Agent': env.OPEN_LIBRARY_USER_AGENT,
@@ -23,14 +24,17 @@ export class OpenLibraryProvider implements BookProvider {
    * Strictly filters/tags Indonesian records.
    */
   async search(query: BookSearchQuery): Promise<ProviderBook[]> {
-    const limit = query.limit ?? 20;
+    const limit = query.limit ?? 30;
     const offset = query.offset ?? 0;
     const page = Math.floor(offset / limit) + 1;
 
     // Build search query with Indonesian language preference/restriction
     let searchParam = query.query.trim();
+    if (searchParam === '*' || searchParam.toLowerCase() === 'all' || searchParam.toLowerCase() === 'semua') {
+      searchParam = '';
+    }
     if (env.STRICT_INDONESIAN_CATALOG) {
-      searchParam = `language:ind ${searchParam}`;
+      searchParam = searchParam ? `language:ind ${searchParam}` : `language:ind`;
     }
 
     const url = new URL('https://openlibrary.org/search.json');
@@ -52,8 +56,13 @@ export class OpenLibraryProvider implements BookProvider {
       }
 
       const data = (await response.json()) as {
+        numFound?: number;
         docs: Array<Record<string, unknown>>;
       };
+
+      if (typeof data.numFound === 'number') {
+        this.lastTotalFound = data.numFound;
+      }
 
       const results: ProviderBook[] = [];
 

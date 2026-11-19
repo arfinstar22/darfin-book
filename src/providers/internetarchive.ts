@@ -8,6 +8,7 @@ import type {
 
 export class InternetArchiveProvider implements BookProvider {
   name = 'internetarchive';
+  lastTotalFound = 30607;
 
   private headers = {
     'User-Agent': env.OPEN_LIBRARY_USER_AGENT,
@@ -18,15 +19,22 @@ export class InternetArchiveProvider implements BookProvider {
    * Search 30,000+ Indonesian full-text books from Internet Archive.
    */
   async search(query: BookSearchQuery): Promise<ProviderBook[]> {
-    const limit = query.limit ?? 20;
+    const limit = query.limit ?? 30;
     const offset = query.offset ?? 0;
     const page = Math.floor(offset / limit) + 1;
 
     // Sanitize query for Lucene syntax
     const cleanQ = query.query.replace(/[:"()]/g, ' ').trim();
-    if (!cleanQ) return [];
+    const isBroad =
+      !cleanQ ||
+      cleanQ === '*' ||
+      cleanQ.toLowerCase() === 'all' ||
+      cleanQ.toLowerCase() === 'semua' ||
+      cleanQ.toLowerCase() === 'indonesia';
 
-    const searchQuery = `(${cleanQ}) AND (language:indonesian OR language:ind) AND mediatype:(texts)`;
+    const searchQuery = isBroad
+      ? `(language:indonesian OR language:ind) AND mediatype:(texts)`
+      : `(${cleanQ}) AND (language:indonesian OR language:ind) AND mediatype:(texts)`;
 
     const url = new URL('https://archive.org/advancedsearch.php');
     url.searchParams.set('q', searchQuery);
@@ -42,6 +50,7 @@ export class InternetArchiveProvider implements BookProvider {
 
       const data = (await response.json()) as {
         response?: {
+          numFound?: number;
           docs?: Array<{
             identifier: string;
             title?: string;
@@ -51,6 +60,10 @@ export class InternetArchiveProvider implements BookProvider {
           }>;
         };
       };
+
+      if (typeof data.response?.numFound === 'number') {
+        this.lastTotalFound = data.response.numFound;
+      }
 
       const results: ProviderBook[] = [];
 

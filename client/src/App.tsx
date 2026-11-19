@@ -286,7 +286,7 @@ export const App: React.FC = () => {
     setCurrentTab('home');
 
     try {
-      const books = await searchBooks(q, onlyFree);
+      const { books } = await searchBooks(q, onlyFree);
       setSearchResults(books);
     } catch (err: unknown) {
       setSearchError((err as Error).message || 'Terjadi kesalahan saat mencari');

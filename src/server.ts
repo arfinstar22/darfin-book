@@ -185,7 +185,7 @@ export async function buildServer() {
       });
     }
 
-    const limit = query.limit ? parseInt(query.limit, 10) : 20;
+    const limit = query.limit ? Math.min(parseInt(query.limit, 10), 100) : 30;
     const offset = query.offset ? parseInt(query.offset, 10) : 0;
     const freeOnly = query.freeOnly === 'true';
 

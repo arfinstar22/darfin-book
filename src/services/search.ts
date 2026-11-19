@@ -87,10 +87,17 @@ export class SearchService {
       return score(b) - score(a);
     });
 
+    const reqLimit = query.limit || 30;
+    const estimatedTotal = Math.max(
+      deduplicated.length,
+      this.internetArchive.lastTotalFound || 0,
+      query.freeOnly ? 0 : this.openLibrary.lastTotalFound || 0
+    );
+
     return {
       query: trimmed,
-      total: deduplicated.length,
-      books: deduplicated.slice(0, query.limit || 20),
+      total: estimatedTotal,
+      books: deduplicated.slice(0, reqLimit),
     };
   }
 
