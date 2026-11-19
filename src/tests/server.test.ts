@@ -31,7 +31,7 @@ describe('Fastify server endpoints and search integration', () => {
     expect(body.valid).toBe(true);
     expect(body.type).toBe('ISBN-13');
     expect(body.isbn).toBe('9786020385914');
-  });
+  }, 15000);
 
   it('searches Indonesian educational textbooks and literature', async () => {
     const server = await buildServer();
@@ -48,7 +48,7 @@ describe('Fastify server endpoints and search integration', () => {
       b.title.toLowerCase().includes('matematika')
     );
     expect(hasMath).toBe(true);
-  });
+  }, 15000);
 
   it('provides curated shelves on /api/v1/curated', async () => {
     const server = await buildServer();

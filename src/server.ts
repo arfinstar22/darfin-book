@@ -191,7 +191,89 @@ export async function buildServer() {
   server.get('/api/v1/auth/config', async () => {
     return {
       googleClientId: env.GOOGLE_CLIENT_ID || '',
+      hasGoogleOAuth: Boolean(env.GOOGLE_CLIENT_ID),
     };
+  });
+
+  // Official Google OAuth 2.0 URL generator
+  server.get('/api/v1/auth/google/url', async (request, reply) => {
+    if (!env.GOOGLE_CLIENT_ID) {
+      return {
+        configured: false,
+        error: 'GOOGLE_CLIENT_ID belum dikonfigurasi di server',
+      };
+    }
+
+    const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'darfin-book.onrender.com';
+    const proto = (request.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
+    const redirectUri = `${proto}://${host}/api/v1/auth/google/callback`;
+
+    const params = new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'openid email profile',
+      prompt: 'select_account',
+      access_type: 'online',
+    });
+
+    return {
+      configured: true,
+      url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+    };
+  });
+
+  // Official Google OAuth 2.0 Redirect Callback
+  server.get('/api/v1/auth/google/callback', async (request, reply) => {
+    const { code } = request.query as { code?: string };
+    if (!code || !env.GOOGLE_CLIENT_ID) {
+      return reply.redirect('/?error=google_auth_failed');
+    }
+
+    const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'darfin-book.onrender.com';
+    const proto = (request.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
+    const redirectUri = `${proto}://${host}/api/v1/auth/google/callback`;
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: env.GOOGLE_CLIENT_ID,
+          client_secret: env.GOOGLE_CLIENT_SECRET || '',
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+        }),
+      });
+
+      const tokenData = (await tokenRes.json()) as { access_token?: string; id_token?: string };
+      if (!tokenData.access_token && !tokenData.id_token) {
+        return reply.redirect('/?error=token_exchange_failed');
+      }
+
+      // Fetch user profile from Google
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const profile = (await profileRes.json()) as { email?: string; name?: string; picture?: string; sub?: string };
+
+      if (!profile.email) {
+        return reply.redirect('/?error=email_not_found');
+      }
+
+      const authResult = await userService.loginWithGoogle({
+        email: profile.email,
+        name: profile.name,
+        picture: profile.picture,
+        googleId: profile.sub,
+      });
+
+      return reply.redirect(`/?auth_token=${encodeURIComponent(authResult.token)}`);
+    } catch (err) {
+      server.log.error({ err }, 'Google OAuth callback exchange failed');
+      return reply.redirect('/?error=google_auth_error');
+    }
   });
 
   // Google / Gmail Authentication

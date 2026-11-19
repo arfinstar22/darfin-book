@@ -21,6 +21,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
 
   GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_BOOKS_API_KEY: z.string().optional(),
   OPEN_LIBRARY_USER_AGENT: z
     .string()

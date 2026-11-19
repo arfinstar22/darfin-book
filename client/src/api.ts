@@ -2,7 +2,7 @@ import type { Book, CuratedShelf, ReaderResolution, UserProfile, BookmarkItem, R
 
 const API_BASE = '/api/v1';
 
-export async function getAuthConfigApi(): Promise<{ googleClientId: string }> {
+export async function getAuthConfigApi(): Promise<{ googleClientId: string; hasGoogleOAuth: boolean }> {
   try {
     const res = await fetch(`${API_BASE}/auth/config`);
     if (res.ok) {
@@ -11,7 +11,19 @@ export async function getAuthConfigApi(): Promise<{ googleClientId: string }> {
   } catch {
     // fallback if offline or error
   }
-  return { googleClientId: '' };
+  return { googleClientId: '', hasGoogleOAuth: false };
+}
+
+export async function getGoogleAuthUrlApi(): Promise<{ configured: boolean; url?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/google/url`);
+    if (res.ok) {
+      return res.json();
+    }
+  } catch {
+    // fallback
+  }
+  return { configured: false, error: 'Gagal menghubungi server untuk Google OAuth' };
 }
 
 export async function loginWithGoogleApi(payload: {
