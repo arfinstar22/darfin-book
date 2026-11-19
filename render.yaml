@@ -31,8 +31,3 @@ services:
         generateValue: true
       - key: SESSION_SECRET
         generateValue: true
-      # Optional: set when telegram bot token is ready
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: GOOGLE_BOOKS_API_KEY
-        sync: false
