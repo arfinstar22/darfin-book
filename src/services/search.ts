@@ -1,0 +1,133 @@
+import { GoogleBooksProvider } from '../providers/googlebooks.js';
+import { KemdikbudProvider } from '../providers/kemdikbud.js';
+import { OpenLibraryProvider } from '../providers/openlibrary.js';
+import type { BookSearchQuery, ProviderBook } from '../providers/types.js';
+import { WikisourceProvider } from '../providers/wikisource.js';
+import { validateIsbn } from '../utils/isbn.js';
+
+export class SearchService {
+  private openLibrary = new OpenLibraryProvider();
+  private wikisource = new WikisourceProvider();
+  private googleBooks = new GoogleBooksProvider();
+  private kemdikbud = new KemdikbudProvider();
+
+  /**
+   * Orchestrates search across all providers.
+   * Ensures 100% strict Indonesian language verification.
+   */
+  async search(query: BookSearchQuery): Promise<{
+    query: string;
+    total: number;
+    books: ProviderBook[];
+  }> {
+    const trimmed = query.query.trim();
+    if (!trimmed) {
+      return { query: '', total: 0, books: [] };
+    }
+
+    // 1. Detect if query is an ISBN
+    const isbnCheck = validateIsbn(trimmed);
+    if (isbnCheck.valid) {
+      const isbnResults = await this.searchByIsbn(isbnCheck.normalized);
+      return {
+        query: trimmed,
+        total: isbnResults.length,
+        books: isbnResults,
+      };
+    }
+
+    // 2. Multi-provider parallel search
+    const [kemdikbudRes, wikisourceRes, openLibraryRes, googleBooksRes] =
+      await Promise.allSettled([
+        this.kemdikbud.search(query),
+        this.wikisource.search(query),
+        this.openLibrary.search(query),
+        this.googleBooks.search(query),
+      ]);
+
+    const collected: ProviderBook[] = [];
+
+    if (kemdikbudRes.status === 'fulfilled') {
+      collected.push(...kemdikbudRes.value);
+    }
+    if (wikisourceRes.status === 'fulfilled') {
+      collected.push(...wikisourceRes.value);
+    }
+    if (openLibraryRes.status === 'fulfilled') {
+      collected.push(...openLibraryRes.value);
+    }
+    if (googleBooksRes.status === 'fulfilled') {
+      collected.push(...googleBooksRes.value);
+    }
+
+    // Strict Indonesian filtering
+    const indonesianOnly = collected.filter(
+      (b) => b.isIndonesianVerified && b.languageCode === 'id'
+    );
+
+    // Deduplication by title similarity + primary ISBN
+    const deduplicated = this.deduplicateBooks(indonesianOnly);
+
+    // If freeOnly is requested, prioritize books with FULL_ACCESS and BORROW_AVAILABLE
+    if (query.freeOnly) {
+      deduplicated.sort((a, b) => {
+        const score = (status: string) => {
+          if (status === 'FULL_ACCESS') return 2;
+          if (status === 'BORROW_AVAILABLE') return 1;
+          return 0;
+        };
+        return score(b.access.status) - score(a.access.status);
+      });
+    }
+
+    return {
+      query: trimmed,
+      total: deduplicated.length,
+      books: deduplicated.slice(0, query.limit || 20),
+    };
+  }
+
+  /**
+   * Search by ISBN with provider fallback.
+   */
+  async searchByIsbn(isbn: string): Promise<ProviderBook[]> {
+    const results: ProviderBook[] = [];
+
+    // Check Open Library first
+    const olBook = await this.openLibrary.getByIsbn(isbn);
+    if (olBook && olBook.isIndonesianVerified) {
+      results.push(olBook);
+    }
+
+    // Check Google Books
+    const gbBook = await this.googleBooks.getByIsbn(isbn);
+    if (gbBook && gbBook.isIndonesianVerified) {
+      results.push(gbBook);
+    }
+
+    return results;
+  }
+
+  /**
+   * Conservative deduplication based on title & ISBN.
+   */
+  private deduplicateBooks(books: ProviderBook[]): ProviderBook[] {
+    const seen = new Set<string>();
+    const unique: ProviderBook[] = [];
+
+    for (const book of books) {
+      const normalizedTitle = book.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 30);
+
+      const key = book.isbn13 || book.isbn10 || normalizedTitle;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(book);
+      }
+    }
+
+    return unique;
+  }
+}
