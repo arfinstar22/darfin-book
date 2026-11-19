@@ -261,8 +261,8 @@ export async function buildServer() {
       const shelves = [
         {
           id: 'novel-populer',
-          title: 'Novel Populer & Karya Penulis Favorit (Tere Liye, Pidi Baiq, dll)',
-          subtitle: 'Koleksi novel best seller: Tere Liye, Pidi Baiq (Dilan & Milea), Andrea Hirata, dan karya sastra modern',
+          title: 'Novel & Fiksi',
+          subtitle: 'Kumpulan novel best seller, roman remaja, dan karya sastra fiksi pilihan nusantara',
           books: novelBooks,
         },
         {

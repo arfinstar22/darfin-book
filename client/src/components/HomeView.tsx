@@ -115,10 +115,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <button
               type="button"
               onClick={() => onNavigateExplore('novel')}
-              className="inline-flex items-center gap-2 rounded-2xl border border-purple-400/30 bg-purple-500/20 px-4 py-3 text-xs sm:text-sm font-bold text-purple-200 hover:bg-purple-500/30 backdrop-blur-md transition cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-xs sm:text-sm font-semibold text-white hover:bg-white/20 backdrop-blur-md transition cursor-pointer"
             >
               <BookMarked className="h-4 w-4 text-purple-300" />
-              <span>Novel (Tere Liye, Dilan, dll)</span>
+              <span>Novel &amp; Fiksi</span>
             </button>
 
             <button
