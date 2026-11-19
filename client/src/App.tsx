@@ -22,6 +22,7 @@ import { BookCard } from './components/BookCard.js';
 import { BookDetailModal } from './components/BookDetailModal.js';
 import { BottomNav, type NavTab } from './components/BottomNav.js';
 import { ExploreView } from './components/ExploreView.js';
+import { HomeView } from './components/HomeView.js';
 import { LoginModal } from './components/LoginModal.js';
 import { Navbar } from './components/Navbar.js';
 import { ReaderModal } from './components/ReaderModal.js';
@@ -278,6 +279,8 @@ export const App: React.FC = () => {
     const q = queryText.trim();
     if (!q) {
       setSearchResults(null);
+      setSearchQuery('');
+      setIsSearching(false);
       return;
     }
 
@@ -298,6 +301,10 @@ export const App: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
     handleSearch(searchQuery, freeOnly);
   };
 
@@ -528,6 +535,12 @@ export const App: React.FC = () => {
           setLoginReason('general');
           setIsLoginModalOpen(true);
         }}
+        onNavigateHome={() => {
+          setSearchResults(null);
+          setSearchQuery('');
+          setCurrentTab('home');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         onNavigateAccount={() => {
           setCurrentTab('account');
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -550,8 +563,8 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {/* Search Results Display */}
-            {!isSearching && searchResults !== null && (
+            {/* Search Results Display (Only active when search query is not empty and results exist) */}
+            {!isSearching && searchResults !== null && searchQuery.trim() !== '' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between border-b border-[#E8E5DF] dark:border-slate-800 pb-3">
                   <div>
@@ -564,13 +577,14 @@ export const App: React.FC = () => {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => {
                       setSearchResults(null);
                       setSearchQuery('');
                     }}
-                    className="text-xs font-semibold text-[#0D9488] dark:text-teal-400 hover:underline"
+                    className="flex items-center gap-1 text-xs font-bold text-[#0D9488] dark:text-teal-400 hover:underline cursor-pointer"
                   >
-                    Kembali ke Beranda
+                    <span>✕ Tutup Pencarian &amp; Kembali ke Beranda</span>
                   </button>
                 </div>
 
@@ -601,95 +615,24 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {/* Default Home Discovery (When not searching) */}
-            {!isSearching && searchResults === null && (
-              <div className="space-y-10">
-                {/* Hero Editorial Card */}
-                <section className="relative overflow-hidden rounded-3xl bg-[#0B132B] dark:bg-slate-900/90 border dark:border-slate-800 p-6 text-white sm:p-10 shadow-lg">
-                  <div className="relative z-10 max-w-xl">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-500/20 px-3 py-1 text-xs font-semibold text-teal-300 backdrop-blur-xs">
-                      <Sparkles className="h-3.5 w-3.5 text-teal-400" />
-                      <span>Koleksi Terbuka Resmi Indonesia</span>
-                    </span>
-
-                    <h1 className="mt-4 text-2xl font-bold tracking-tight sm:text-4xl leading-tight">
-                      Perpustakaan Digital untuk Semua.
-                    </h1>
-
-                    <p className="mt-3 text-xs leading-relaxed text-slate-300 sm:text-sm">
-                      Ribuan buku berbahasa Indonesia dapat diakses langsung tanpa login. Mulai dari buku teks pelajaran sekolah resmi Kurikulum Merdeka hingga naskah sastra klasik nusantara.
-                    </p>
-
-                    <div className="mt-6 flex flex-wrap gap-2.5">
-                      <button
-                        onClick={() => {
-                          setSearchQuery('pelajaran');
-                          handleSearch('pelajaran', true);
-                        }}
-                        className="rounded-xl bg-[#0D9488] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-teal-700 transition"
-                      >
-                        Buku Pelajaran Sekolah
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSearchQuery('cerita');
-                          handleSearch('cerita', true);
-                        }}
-                        className="rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition"
-                      >
-                        Sastra & Cerita Rakyat
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Decorative Subtle Background Elements */}
-                  <div className="pointer-events-none absolute -right-10 -bottom-10 h-64 w-64 rounded-full bg-teal-600/10 blur-3xl" />
-                </section>
-
-                {/* Curated Shelves Section */}
-                {loadingShelves ? (
-                  <div className="flex h-32 items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin text-stone-400 dark:text-slate-500" />
-                  </div>
-                ) : (
-                  shelves.map((shelf) => (
-                    <section key={shelf.id} className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-lg font-bold text-[#1A1A1A] dark:text-white">
-                            {shelf.title}
-                          </h2>
-                          <p className="text-xs text-stone-500 dark:text-slate-400">{shelf.subtitle}</p>
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setSearchQuery(shelf.id.includes('pelajaran') ? 'pelajaran' : 'cerita');
-                            handleSearch(shelf.id.includes('pelajaran') ? 'pelajaran' : 'cerita', true);
-                          }}
-                          className="flex items-center gap-1 text-xs font-semibold text-[#0D9488] dark:text-teal-400 hover:underline"
-                        >
-                          <span>Lihat Semua</span>
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-                        {shelf.books.slice(0, 4).map((book) => (
-                          <BookCard
-                            key={`${book.provider}-${book.providerId}`}
-                            book={book}
-                            onSelect={setSelectedBook}
-                            onReadDirect={setActiveReadingBook}
-                            isFavorite={favoriteIds.includes(`${book.provider}:${book.providerId}`)}
-                            onToggleFavorite={handleToggleFavorite}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  ))
-                )}
-              </div>
+            {/* Default Aesthetic Home Discovery (Rendered when not searching or query is cleared) */}
+            {!isSearching && (searchResults === null || searchQuery.trim() === '') && (
+              <HomeView
+                shelves={shelves}
+                loadingShelves={loadingShelves}
+                onSelectBook={setSelectedBook}
+                onReadBook={setActiveReadingBook}
+                onToggleFavorite={handleToggleFavorite}
+                favoriteIds={favoriteIds}
+                onNavigateExplore={(catId) => {
+                  setCurrentTab('explore');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onSearchTopic={(topic) => {
+                  setSearchQuery(topic);
+                  handleSearch(topic, true);
+                }}
+              />
             )}
           </div>
         )}
@@ -795,6 +738,10 @@ export const App: React.FC = () => {
       <BottomNav
         currentTab={currentTab}
         onTabChange={(tab) => {
+          if (tab === 'home') {
+            setSearchResults(null);
+            setSearchQuery('');
+          }
           setCurrentTab(tab);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}

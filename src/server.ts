@@ -201,9 +201,11 @@ export async function buildServer() {
 
   // Curated Indonesian shelves
   server.get('/api/v1/curated', async () => {
-    const [textbooks, classics] = await Promise.all([
+    const [textbooks, classics, science, history] = await Promise.all([
       searchService.search({ query: 'pelajaran', limit: 8, freeOnly: true }),
       searchService.search({ query: 'cerita', limit: 8, freeOnly: true }),
+      searchService.search({ query: 'matematika', limit: 8, freeOnly: true }),
+      searchService.search({ query: 'sejarah', limit: 8, freeOnly: true }),
     ]);
 
     return {
@@ -211,14 +213,26 @@ export async function buildServer() {
         {
           id: 'buku-pelajaran',
           title: 'Buku Teks Pelajaran Resmi (SD, SMP, SMA/SMK)',
-          subtitle: 'Kurikulum Merdeka Kemendikbudristek — 100% Gratis & Legal',
+          subtitle: 'Kurikulum Merdeka Kemendikdasmen RI - 100% Legal & Terbuka untuk Siswa & Guru',
           books: textbooks.books,
         },
         {
           id: 'sastra-nusantara',
           title: 'Sastra & Cerita Rakyat Nusantara',
-          subtitle: 'Karya sastra domain publik dan cerita rakyat nusantara',
+          subtitle: 'Karya sastra klasik nusantara, fabel dongeng rakyat, dan naskah kuno berlisensi bebas',
           books: classics.books,
+        },
+        {
+          id: 'sains-populer',
+          title: 'Matematika, Sains & Pengetahuan Terbuka',
+          subtitle: 'Buku rujukan ilmu pengetahuan alam, matematika, dan teknologi bahasa Indonesia',
+          books: science.books,
+        },
+        {
+          id: 'sejarah-tokoh',
+          title: 'Sejarah, Biografi & Budaya Nusantara',
+          subtitle: 'Catatan perjalanan bangsa, biografi tokoh pergerakan, dan peradaban Indonesia',
+          books: history.books,
         },
       ],
     };

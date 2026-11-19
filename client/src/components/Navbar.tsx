@@ -12,6 +12,7 @@ interface NavbarProps {
   onToggleDarkMode: () => void;
   user?: UserProfile | null;
   onOpenLogin?: () => void;
+  onNavigateHome?: () => void;
   onNavigateAccount?: () => void;
   onLogout?: () => void;
 }
@@ -26,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleDarkMode,
   user,
   onOpenLogin,
+  onNavigateHome,
   onNavigateAccount,
   onLogout,
 }) => {
@@ -33,7 +35,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-30 border-b border-[#E8E5DF] dark:border-slate-800 bg-[#FDFBF7]/90 dark:bg-[#080E1E]/90 backdrop-blur-md transition-colors duration-200">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         {/* Brand: Logo + Wordmark */}
-        <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onNavigateHome}
+          className="flex items-center gap-3 text-left hover:opacity-90 transition cursor-pointer"
+          title="Kembali ke Beranda"
+        >
           <img
             src="/logo.png"
             alt="DARFIN BOOK Logo"
@@ -47,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               Perpustakaan Digital untuk Semua
             </span>
           </div>
-        </div>
+        </button>
 
         {/* Global Search Bar */}
         <form
@@ -60,8 +67,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Cari judul, pelajaran, novel, atau ISBN..."
-            className="w-full rounded-full border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-10 pr-4 text-sm text-[#1A1A1A] dark:text-slate-100 placeholder-[#8C887B] dark:placeholder-slate-500 transition focus:border-[#0D9488] focus:outline-none focus:ring-2 focus:ring-[#0D9488]/20"
+            className="w-full rounded-full border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-10 pr-10 text-xs sm:text-sm text-[#1A1A1A] dark:text-white placeholder-[#8C887B] dark:placeholder-slate-500 shadow-inner focus:border-[#0D9488] dark:focus:border-teal-500 focus:outline-hidden focus:ring-1 focus:ring-[#0D9488] transition"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              className="absolute right-3.5 text-xs text-stone-400 hover:text-stone-600 dark:hover:text-slate-300"
+              title="Bersihkan pencarian"
+            >
+              ✕
+            </button>
+          )}
         </form>
 
         <div className="flex items-center gap-2">
