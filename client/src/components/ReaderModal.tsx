@@ -20,6 +20,8 @@ import {
   Layers,
   Loader2,
   Download,
+  Maximize,
+  RotateCcw,
 } from 'lucide-react';
 import { resolveReader, getWikisourceContent } from '../api.js';
 import type { Book, ReaderResolution } from '../types.js';
@@ -60,7 +62,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [currentPage, setCurrentPage] = useState(0);
   const [pageInput, setPageInput] = useState('1');
   const [imageLoading, setImageLoading] = useState(true);
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%, 1.25, 1.5, 1.75, 2.0
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [clientTotalPages, setClientTotalPages] = useState<number | null>(null);
@@ -73,6 +75,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const lastTapTime = useRef<number>(0);
+  const tapTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const totalPages = clientTotalPages || resolution?.totalPages || 100;
 
@@ -163,7 +168,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     };
   }, []);
 
-  // Keyboard navigation
+  // Keyboard navigation & Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -176,6 +181,12 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         goToPrevPage();
       } else if (e.key === 'f' || e.key === 'F') {
         toggleFullscreen();
+      } else if (e.key === '+' || e.key === '=') {
+        zoomIn();
+      } else if (e.key === '-' || e.key === '_') {
+        zoomOut();
+      } else if (e.key === '0') {
+        resetZoom();
       } else if (e.key === 'Escape' && !document.fullscreenElement) {
         onClose();
       }
@@ -183,22 +194,32 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, totalPages]);
+  }, [currentPage, totalPages, zoomLevel]);
 
-  // Touch Swipe Handlers for mobile
+  // Touch Swipe Handlers for mobile (active only when not zoomed in)
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+    if (e.touches.length === 1) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const diff = e.changedTouches[0].clientX - touchStartX.current;
-    if (diff < -50) {
-      goToNextPage();
-    } else if (diff > 50) {
-      goToPrevPage();
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX.current;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+
+    // Only trigger horizontal swipe if not zoomed in and horizontal movement > vertical movement
+    if (zoomLevel <= 1 && Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX < -50) {
+        goToNextPage();
+      } else if (diffX > 50) {
+        goToPrevPage();
+      }
     }
+
     touchStartX.current = null;
+    touchStartY.current = null;
   };
 
   const goToNextPage = () => {
@@ -213,6 +234,52 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       setImageLoading(true);
       setCurrentPage((prev) => prev - 1);
     }
+  };
+
+  // Zoom Helpers
+  const zoomIn = () => {
+    setZoomLevel((prev) => Math.min(2.5, Math.round((prev + 0.25) * 100) / 100));
+  };
+
+  const zoomOut = () => {
+    setZoomLevel((prev) => Math.max(0.8, Math.round((prev - 0.25) * 100) / 100));
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+  };
+
+  const toggleFitWidth = () => {
+    setZoomLevel((prev) => (prev > 1.3 ? 1 : 1.6));
+  };
+
+  // Canvas Tap Handler: Distinguishes between Single Tap (toggle controls / flip) and Double Tap (zoom)
+  const handleCanvasClick = (e: React.MouseEvent, clickX: number, width: number) => {
+    const now = Date.now();
+    const isDouble = now - lastTapTime.current < 280;
+    lastTapTime.current = now;
+
+    if (isDouble) {
+      if (tapTimeout.current) clearTimeout(tapTimeout.current);
+      // Double tap toggles between normal (1.0) and enlarged (1.6) for readers with poor eyesight
+      setZoomLevel((prev) => (prev > 1.2 ? 1.0 : 1.6));
+      return;
+    }
+
+    tapTimeout.current = setTimeout(() => {
+      // Single Tap Logic:
+      if (viewMode === 'single' && zoomLevel <= 1.1) {
+        if (clickX < width * 0.2) {
+          goToPrevPage();
+        } else if (clickX > width * 0.8) {
+          goToNextPage();
+        } else {
+          setIsControlsVisible((prev) => !prev);
+        }
+      } else {
+        setIsControlsVisible((prev) => !prev);
+      }
+    }, 280);
   };
 
   const handleBookmarkClick = () => {
@@ -276,6 +343,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
     return () => {
       isMounted = false;
+      if (tapTimeout.current) clearTimeout(tapTimeout.current);
     };
   }, [book]);
 
@@ -301,6 +369,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       input: 'bg-stone-100 border border-stone-300 text-[#1A1A1A]',
       slider: 'accent-teal-600',
       tagText: 'text-stone-500',
+      zoomPill: 'bg-white/95 border border-stone-200 text-stone-800 shadow-xl',
     },
     sepia: {
       container: 'bg-[#F4ECD8] text-[#433422]',
@@ -312,6 +381,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       input: 'bg-[#EBDDBF] border border-[#C8B68F] text-[#433422]',
       slider: 'accent-[#7A5A35]',
       tagText: 'text-[#7D6B56]',
+      zoomPill: 'bg-[#FAF4E6]/95 border border-[#D5C5A1] text-[#433422] shadow-xl',
     },
     dark: {
       container: 'bg-[#080E1E] text-[#F1F5F9]',
@@ -323,21 +393,22 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       input: 'bg-slate-800 border border-slate-600 text-white',
       slider: 'accent-teal-500',
       tagText: 'text-slate-400',
+      zoomPill: 'bg-[#0F172A]/95 border border-slate-700 text-white shadow-2xl',
     },
   }[theme];
 
   return (
     <div
       ref={containerRef}
-      className={`fixed inset-0 z-50 flex flex-col select-none ${themeStyles.container} transition-colors duration-200`}
+      className={`fixed inset-0 z-50 flex flex-col select-none ${themeStyles.container} transition-colors duration-200 overflow-hidden`}
     >
-      {/* Top Header Controls Bar */}
+      {/* Top Header Controls Bar (Overlay Fixed at Top) */}
       <header
-        className={`flex items-center justify-between border-b px-3 sm:px-6 py-2.5 backdrop-blur-md transition-all duration-300 z-30 ${
+        className={`fixed top-0 inset-x-0 z-40 flex items-center justify-between border-b px-3 sm:px-6 py-2.5 backdrop-blur-md transition-all duration-300 ${
           themeStyles.header
-        } ${isControlsVisible ? 'opacity-100 translate-y-0' : '-translate-y-full opacity-0 pointer-events-none'}`}
+        } ${isControlsVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}
       >
-        {/* Left: Close Button (Large, comfortable 44px target) */}
+        {/* Left: Close Button (Large 44px touch target) */}
         <div className="flex items-center">
           <button
             onClick={onClose}
@@ -348,8 +419,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           </button>
         </div>
 
-        {/* Right: Clean, spacious, high-contrast Reader Controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Right: High-Contrast Reader Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* Table of Contents for multi-chapter books */}
           {chapters.length > 1 && (
             <div className="relative">
@@ -383,11 +454,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             </div>
           )}
 
-          {/* Native In-App Reader: Mode Lembar vs Mode Gulir */}
+          {/* Mode Lembar vs Mode Gulir */}
           {hasNativeIaReader && useNativeReader && (
             <button
-              onClick={() => setViewMode(viewMode === 'single' ? 'scroll' : 'single')}
-              className={`flex h-11 items-center gap-1.5 rounded-2xl px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${themeStyles.btnDefault}`}
+              onClick={() => {
+                setViewMode(viewMode === 'single' ? 'scroll' : 'single');
+                resetZoom();
+              }}
+              className={`flex h-11 items-center gap-1.5 rounded-2xl px-2.5 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${themeStyles.btnDefault}`}
               title={viewMode === 'single' ? 'Ganti ke Mode Gulir Vertikal (Scroll)' : 'Ganti ke Mode Halaman Satuan (Flip)'}
             >
               {viewMode === 'single' ? (
@@ -402,7 +476,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           {/* Bookmark Button */}
           <button
             onClick={handleBookmarkClick}
-            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl px-2.5 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${
               bookmarkSavedToast
                 ? 'bg-emerald-600 text-white font-bold border border-emerald-600 shadow-sm'
                 : themeStyles.btnDefault
@@ -419,7 +493,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             </span>
           </button>
 
-          {/* Theme Switcher: 3 large, distinctive high-contrast buttons */}
+          {/* Theme Switcher: 3 large, high-contrast buttons */}
           <div className={`flex h-11 items-center rounded-2xl p-1 gap-1 ${themeStyles.themeBox}`}>
             <button
               onClick={() => setTheme('paper')}
@@ -456,7 +530,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             </button>
           </div>
 
-          {/* Fullscreen Toggle Button (Prominent & high contrast) */}
+          {/* Fullscreen Toggle Button */}
           <button
             onClick={toggleFullscreen}
             className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition shadow-sm ${
@@ -472,9 +546,11 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         </div>
       </header>
 
-      {/* Reader Viewport Area */}
+      {/* Reader Viewport Area (Takes 100% of Screen, with Dynamic Padding when controls are shown) */}
       <main
-        className="flex-1 relative overflow-y-auto overflow-x-hidden flex flex-col"
+        className={`fixed inset-0 z-20 flex flex-col overflow-auto transition-all duration-300 ${
+          isControlsVisible ? 'pt-16 pb-20' : 'pt-0 pb-0'
+        }`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -509,28 +585,22 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             {/* 1. Custom In-App DARFIN Clean Book Reader (Direct Page Streaming) */}
             {hasNativeIaReader && useNativeReader ? (
               <div
-                className="relative flex-1 flex flex-col justify-center items-center w-full min-h-full"
+                className="relative flex-1 flex flex-col justify-center items-center w-full h-full min-h-full"
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const clickX = e.clientX - rect.left;
-                  const width = rect.width;
-
-                  if (viewMode === 'single') {
-                    if (clickX < width * 0.22) {
-                      goToPrevPage();
-                    } else if (clickX > width * 0.78) {
-                      goToNextPage();
-                    } else {
-                      setIsControlsVisible((prev) => !prev);
-                    }
-                  } else {
-                    setIsControlsVisible((prev) => !prev);
-                  }
+                  handleCanvasClick(e, clickX, rect.width);
                 }}
               >
                 {/* Mode Lembar (Single Page) */}
                 {viewMode === 'single' ? (
-                  <div className="relative flex-1 flex items-center justify-center w-full p-2 sm:p-4 overflow-auto">
+                  <div
+                    className="relative flex-1 flex items-center justify-center w-full h-full overflow-auto p-1 sm:p-4"
+                    style={{
+                      WebkitOverflowScrolling: 'touch',
+                      cursor: zoomLevel > 1.1 ? 'grab' : 'default',
+                    }}
+                  >
                     {/* Navigation Hotspot Buttons (hidden on mobile, visible on desktop hover) */}
                     <button
                       onClick={(e) => {
@@ -538,7 +608,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         goToPrevPage();
                       }}
                       disabled={currentPage <= 0}
-                      className="hidden sm:flex absolute left-4 z-20 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
+                      className="hidden sm:flex absolute left-4 z-30 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
                       title="Halaman Sebelumnya"
                     >
                       <ChevronLeft className="h-6 w-6" />
@@ -550,19 +620,23 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         goToNextPage();
                       }}
                       disabled={currentPage >= totalPages - 1}
-                      className="hidden sm:flex absolute right-4 z-20 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
+                      className="hidden sm:flex absolute right-4 z-30 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
                       title="Halaman Selanjutnya"
                     >
                       <ChevronRight className="h-6 w-6" />
                     </button>
 
-                    {/* Page Container */}
+                    {/* Page Container with Real Zoom Expansion */}
                     <div
-                      className="relative flex items-center justify-center max-w-full transition-transform duration-150"
-                      style={{
-                        transform: `scale(${zoomLevel})`,
-                        transformOrigin: 'center center',
-                      }}
+                      className="relative flex items-center justify-center transition-all duration-200"
+                      style={
+                        zoomLevel > 1
+                          ? {
+                              width: `${zoomLevel * 100}%`,
+                              minWidth: `${zoomLevel * 100}%`,
+                            }
+                          : { width: '100%', height: '100%' }
+                      }
                     >
                       {imageLoading && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
@@ -579,17 +653,41 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         alt={`Halaman ${currentPage + 1}`}
                         onLoad={() => setImageLoading(false)}
                         onError={() => setImageLoading(false)}
-                        className={`max-h-[84vh] sm:max-h-[88vh] w-auto max-w-full rounded-md shadow-2xl object-contain transition-opacity duration-200 ${
+                        style={
+                          zoomLevel > 1
+                            ? {
+                                width: `${Math.min(zoomLevel * 100, 300)}%`,
+                                maxWidth: 'none',
+                              }
+                            : undefined
+                        }
+                        className={`rounded-md shadow-2xl object-contain select-none transition-all duration-200 ${
                           imageLoading ? 'opacity-30' : 'opacity-100'
+                        } ${
+                          zoomLevel > 1
+                            ? 'h-auto max-w-none'
+                            : isControlsVisible
+                            ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
+                            : 'max-h-[98vh] w-auto max-w-full'
                         }`}
                         draggable={false}
                       />
                     </div>
                   </div>
                 ) : (
-                  /* Mode Gulir (Continuous Vertical Scroll) */
+                  /* Mode Gulir (Continuous Vertical Scroll with Zoom Support) */
                   <div className="w-full flex-1 overflow-y-auto px-2 py-6">
-                    <div className="max-w-3xl mx-auto flex flex-col items-center gap-6">
+                    <div
+                      className="mx-auto flex flex-col items-center gap-6 transition-all duration-200"
+                      style={{
+                        maxWidth:
+                          zoomLevel >= 1.6
+                            ? '100%'
+                            : zoomLevel >= 1.3
+                            ? '56rem'
+                            : '48rem',
+                      }}
+                    >
                       {Array.from({ length: totalPages }, (_, idx) => (
                         <div key={idx} className="w-full flex flex-col items-center">
                           <div className="relative w-full flex justify-center rounded-xl overflow-hidden shadow-lg border border-black/10">
@@ -597,7 +695,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                               src={resolution.pageTemplateUrl!.replace('{page}', String(idx))}
                               alt={`Halaman ${idx + 1}`}
                               loading="lazy"
-                              className="w-full h-auto object-contain max-h-[92vh]"
+                              className="w-full h-auto object-contain max-h-[96vh]"
                             />
                           </div>
                           <span className={`mt-2 text-[11px] font-mono ${themeStyles.tagText}`}>
@@ -609,94 +707,138 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                   </div>
                 )}
 
-                {/* Floating Bottom Navigation Toolbar (Single Page Mode) */}
-                {viewMode === 'single' && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-2xl px-3 py-2 transition-all duration-300 ${
-                      themeStyles.bottomToolbar
-                    } ${
-                      isControlsVisible
-                        ? 'opacity-100 translate-y-0'
-                        : 'opacity-0 translate-y-8 pointer-events-none'
-                    }`}
-                  >
-                    <button
-                      onClick={goToPrevPage}
-                      disabled={currentPage <= 0}
-                      className="rounded-lg p-1.5 hover:bg-black/10 disabled:opacity-30 transition"
-                      title="Halaman Sebelumnya"
-                    >
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-
-                    {/* Interactive Slider Scrubber */}
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(0, totalPages - 1)}
-                      value={currentPage}
-                      onChange={(e) => {
-                        setImageLoading(true);
-                        setCurrentPage(Number(e.target.value));
-                      }}
-                      className={`w-24 sm:w-44 h-1.5 cursor-pointer ${themeStyles.slider}`}
-                      title={`Geser Halaman (1 - ${totalPages})`}
-                    />
-
-                    {/* Page Number & Direct Jump */}
-                    <div className="flex items-center gap-1 text-xs font-semibold">
-                      <span className={themeStyles.tagText}>Hal.</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={totalPages}
-                        value={pageInput}
-                        onChange={(e) => setPageInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const val = parseInt(pageInput, 10);
-                            if (!isNaN(val) && val >= 1 && val <= totalPages) {
-                              setImageLoading(true);
-                              setCurrentPage(val - 1);
-                            }
-                          }
-                        }}
-                        className={`w-12 text-center rounded py-0.5 font-mono text-xs ${themeStyles.input}`}
-                      />
-                      <span className={themeStyles.tagText}>/ {totalPages}</span>
-                    </div>
-
-                    <button
-                      onClick={goToNextPage}
-                      disabled={currentPage >= totalPages - 1}
-                      className="rounded-lg p-1.5 hover:bg-black/10 disabled:opacity-30 transition"
-                      title="Halaman Selanjutnya"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-
-                    {/* Direct PDF Download if available */}
-                    {resolution.pdfUrl && (
-                      <a
-                        href={resolution.pdfUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        download
-                        className="hidden sm:flex items-center gap-1 rounded-lg border border-teal-500/30 bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-100 transition ml-1"
-                        title="Unduh File PDF Lengkap"
+                {/* Floating Bottom Navigation Toolbar (Page Navigation + Zoom) */}
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-wrap items-center justify-center gap-2 rounded-2xl px-3 py-2 transition-all duration-300 max-w-[96vw] ${
+                    themeStyles.bottomToolbar
+                  } ${
+                    isControlsVisible
+                      ? 'translate-y-0 opacity-100'
+                      : 'translate-y-12 opacity-0 pointer-events-none'
+                  }`}
+                >
+                  {/* Page Flipping (In single mode) */}
+                  {viewMode === 'single' && (
+                    <>
+                      <button
+                        onClick={goToPrevPage}
+                        disabled={currentPage <= 0}
+                        className="rounded-lg p-1.5 hover:bg-black/10 disabled:opacity-30 transition"
+                        title="Halaman Sebelumnya"
                       >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>PDF</span>
-                      </a>
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+
+                      {/* Interactive Slider Scrubber */}
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, totalPages - 1)}
+                        value={currentPage}
+                        onChange={(e) => {
+                          setImageLoading(true);
+                          setCurrentPage(Number(e.target.value));
+                        }}
+                        className={`w-20 sm:w-36 h-1.5 cursor-pointer ${themeStyles.slider}`}
+                        title={`Geser Halaman (1 - ${totalPages})`}
+                      />
+
+                      {/* Page Number & Direct Jump */}
+                      <div className="flex items-center gap-1 text-xs font-semibold">
+                        <span className={themeStyles.tagText}>Hal.</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalPages}
+                          value={pageInput}
+                          onChange={(e) => setPageInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const val = parseInt(pageInput, 10);
+                              if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                                setImageLoading(true);
+                                setCurrentPage(val - 1);
+                              }
+                            }
+                          }}
+                          className={`w-11 text-center rounded py-0.5 font-mono text-xs ${themeStyles.input}`}
+                        />
+                        <span className={themeStyles.tagText}>/ {totalPages}</span>
+                      </div>
+
+                      <button
+                        onClick={goToNextPage}
+                        disabled={currentPage >= totalPages - 1}
+                        className="rounded-lg p-1.5 hover:bg-black/10 disabled:opacity-30 transition"
+                        title="Halaman Selanjutnya"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+
+                      <div className="h-4 w-px bg-black/15 mx-0.5" />
+                    </>
+                  )}
+
+                  {/* Zoom Controls (PENTING: Membantu Pembaca Rabun / Teks Kecil) */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={zoomOut}
+                      disabled={zoomLevel <= 0.8}
+                      className="rounded-lg p-1 hover:bg-black/10 disabled:opacity-30 transition"
+                      title="Perkecil Tulisan (-)"
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </button>
+
+                    <button
+                      onClick={toggleFitWidth}
+                      className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold hover:bg-black/10 transition"
+                      title="Klik untuk Perbesar / Normal"
+                    >
+                      {Math.round(zoomLevel * 100)}%
+                    </button>
+
+                    <button
+                      onClick={zoomIn}
+                      disabled={zoomLevel >= 2.5}
+                      className="rounded-lg p-1 hover:bg-black/10 disabled:opacity-30 transition"
+                      title="Perbesar Tulisan (+)"
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </button>
+
+                    {zoomLevel !== 1 && (
+                      <button
+                        onClick={resetZoom}
+                        className="p-1 hover:bg-black/10 rounded transition text-teal-600"
+                        title="Kembalikan ke Ukuran Normal 100%"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
                     )}
                   </div>
-                )}
+
+                  {/* Direct PDF Download if available */}
+                  {resolution.pdfUrl && (
+                    <a
+                      href={resolution.pdfUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      download
+                      className="hidden sm:flex items-center gap-1 rounded-lg border border-teal-500/30 bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-100 transition ml-1"
+                      title="Unduh File PDF Lengkap"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>PDF</span>
+                    </a>
+                  )}
+                </div>
               </div>
             ) : (
               /* 2. Wikisource Clean Text Mode */
               resolution.mode === 'WIKISOURCE_TEXT' && resolution.contentHtml ? (
-                <div className="p-4 sm:p-8 max-w-4xl mx-auto w-full">
+                <div className="p-4 sm:p-8 max-w-4xl mx-auto w-full my-auto">
                   <article
                     className={`prose max-w-none transition-all leading-relaxed ${
                       isSerif ? 'reader-serif' : 'font-sans'
