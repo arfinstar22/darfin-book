@@ -12,6 +12,17 @@ export interface UserProfile {
   avatarUrl?: string | null;
 }
 
+/**
+ * Deterministic user ID generation based on normalized Google email.
+ * Guarantees that across all devices, browser sessions, and container restarts,
+ * the same email always maps to the exact same user account ID.
+ */
+export function getDeterministicUserId(email: string): string {
+  const normalized = email.trim().toLowerCase();
+  const hash = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 24);
+  return `usr_${hash}`;
+}
+
 export interface UserLibraryData {
   books: ProviderBook[];
   favoriteIds: string[]; // Set of `${provider}:${providerId}`
@@ -101,6 +112,46 @@ export class UserService {
   }
 
   /**
+   * Ensures that user record exists in the database.
+   * If database was recreated (e.g. Render restart/redeploy), this seamlessly recreates the user record.
+   */
+  async ensureUser(session: {
+    userId?: string;
+    email?: string;
+    displayName?: string;
+    avatarUrl?: string | null;
+  }): Promise<string> {
+    const email = session.email ? session.email.trim().toLowerCase() : '';
+    if (!email) {
+      return session.userId || `usr_${crypto.randomUUID()}`;
+    }
+    const deterministicId = getDeterministicUserId(email);
+
+    const existing = db.select().from(users).where(eq(users.email, email)).get();
+    if (existing) {
+      return existing.id;
+    }
+
+    // Insert user record with deterministic ID
+    try {
+      db.insert(users)
+        .values({
+          id: deterministicId,
+          email,
+          displayName: session.displayName || email.split('@')[0],
+          avatarUrl: session.avatarUrl || null,
+        })
+        .run();
+    } catch {
+      // Row may have been inserted in concurrent call
+      const fallback = db.select().from(users).where(eq(users.email, email)).get();
+      if (fallback) return fallback.id;
+    }
+
+    return deterministicId;
+  }
+
+  /**
    * Google Sign-In handler: Finds or creates user with verified Google email.
    */
   async loginWithGoogle(data: {
@@ -116,6 +167,7 @@ export class UserService {
 
     const displayName = data.name?.trim() || email.split('@')[0];
     const avatarUrl = data.picture || null;
+    const deterministicId = getDeterministicUserId(email);
 
     // 1. Check existing user
     const existing = db.select().from(users).where(eq(users.email, email)).get();
@@ -134,7 +186,7 @@ export class UserService {
         .where(eq(users.id, userId))
         .run();
     } else {
-      userId = `usr_${crypto.randomUUID()}`;
+      userId = deterministicId;
       db.insert(users)
         .values({
           id: userId,

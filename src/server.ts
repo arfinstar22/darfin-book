@@ -543,8 +543,8 @@ export async function buildServer() {
     }
   });
 
-  // Helper auth extractor
-  const requireAuth = (request: any, reply: any) => {
+  // Helper auth extractor with automatic user reconciliation
+  const requireAuth = async (request: any, reply: any) => {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       reply.code(401).send({ error: 'Sesi masuk diperlukan. Silakan login dengan Google.' });
@@ -556,12 +556,17 @@ export async function buildServer() {
       reply.code(401).send({ error: 'Sesi masuk tidak valid atau kedaluwarsa.' });
       return null;
     }
+
+    // Ensure user record exists in SQLite database (guarantees cross-device & post-restart integrity)
+    const verifiedUserId = await userService.ensureUser(session);
+    session.userId = verifiedUserId;
+
     return session;
   };
 
   // Get current user profile
   server.get('/api/v1/auth/me', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     return {
@@ -576,7 +581,7 @@ export async function buildServer() {
 
   // User Library (Saved Books, Favorites, Bookmarks, Reading Progress)
   server.get('/api/v1/user/library', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const library = await userService.getUserLibrary(session.userId);
@@ -585,7 +590,7 @@ export async function buildServer() {
 
   // Bidirectional User Library Sync (reconciles device library with cloud server)
   server.post('/api/v1/user/sync', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const body = request.body as {
@@ -606,7 +611,7 @@ export async function buildServer() {
 
   // Save book to shelf
   server.post('/api/v1/user/books', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const body = request.body as { book?: ProviderBook; isFavorite?: boolean };
@@ -620,7 +625,7 @@ export async function buildServer() {
 
   // Clear all books from user's shelf
   server.delete('/api/v1/user/shelf/clear', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     await userService.clearShelf(session.userId);
@@ -629,7 +634,7 @@ export async function buildServer() {
 
   // Remove book from shelf
   server.delete('/api/v1/user/books/:provider/:providerId', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const { provider, providerId } = request.params as { provider: string; providerId: string };
@@ -639,7 +644,7 @@ export async function buildServer() {
 
   // Toggle Favorite
   server.post('/api/v1/user/favorites/toggle', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const body = request.body as { book?: ProviderBook };
@@ -653,7 +658,7 @@ export async function buildServer() {
 
   // Save Bookmark / Reading Marker
   server.post('/api/v1/user/bookmarks', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const body = request.body as {
@@ -673,7 +678,7 @@ export async function buildServer() {
 
   // Delete Bookmark
   server.delete('/api/v1/user/bookmarks/:id', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const { id } = request.params as { id: string };
@@ -683,7 +688,7 @@ export async function buildServer() {
 
   // Save Reading Progress
   server.post('/api/v1/user/progress', async (request, reply) => {
-    const session = requireAuth(request, reply);
+    const session = await requireAuth(request, reply);
     if (!session) return;
 
     const body = request.body as {
