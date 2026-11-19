@@ -287,7 +287,7 @@ export const App: React.FC = () => {
 
     syncLibrary();
 
-    // Re-sync when switching back to app window/tab
+    // Re-sync when switching tabs or switching back to app window
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible' && token) {
         syncLibrary();
@@ -297,12 +297,20 @@ export const App: React.FC = () => {
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
+    // Silent background sync every 30 seconds while app is active
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible' && token) {
+        syncLibrary();
+      }
+    }, 30000);
+
     return () => {
       isMounted = false;
+      clearInterval(intervalId);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
-  }, [token]);
+  }, [token, currentTab]);
 
   // Load curated shelves on initial load
   useEffect(() => {
