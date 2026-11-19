@@ -1,5 +1,8 @@
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
+import fs from 'fs';
+import path from 'path';
 import { env } from './config/env.js';
 import { initDb } from './db/index.js';
 import type { ProviderBook } from './providers/types.js';
@@ -123,7 +126,7 @@ export async function buildServer() {
     return results;
   });
 
-  // Curated Indonesian shelves (Buku Pelajaran, Sastra Klasik, Cerita Rakyat, Dokumen Publik)
+  // Curated Indonesian shelves
   server.get('/api/v1/curated', async () => {
     const [textbooks, classics] = await Promise.all([
       searchService.search({ query: 'pelajaran', limit: 8, freeOnly: true }),
@@ -181,6 +184,22 @@ export async function buildServer() {
 
     return content;
   });
+
+  // Serve static frontend in production if built
+  const clientDist = path.resolve(process.cwd(), 'dist/client');
+  if (fs.existsSync(clientDist)) {
+    await server.register(fastifyStatic, {
+      root: clientDist,
+      prefix: '/',
+    });
+
+    server.setNotFoundHandler(async (request, reply) => {
+      if (request.raw.url && request.raw.url.startsWith('/api')) {
+        return reply.code(404).send({ error: 'Endpoint API tidak ditemukan' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return server;
 }

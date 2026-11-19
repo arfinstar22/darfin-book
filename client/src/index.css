@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --paper-bg: #FDFBF7;
+    --paper-card: #FFFFFF;
+    --paper-border: #E8E5DF;
+    --ink-primary: #1A1A1A;
+    --ink-secondary: #5A5A5A;
+    --brand-navy: #0B132B;
+    --brand-teal: #0D9488;
+    --brand-gold: #D4AF37;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Reader Typography & Themes */
+.reader-serif {
+  font-family: 'Newsreader', Georgia, Cambria, serif;
+}
+
+.theme-paper {
+  background-color: #FDFBF7;
+  color: #1A1A1A;
+}
+
+.theme-sepia {
+  background-color: #F4ECD8;
+  color: #433422;
+}
+
+.theme-dark {
+  background-color: #121826;
+  color: #E2E8F0;
+}

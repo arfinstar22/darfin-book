@@ -44,7 +44,6 @@ describe('Fastify server endpoints and search integration', () => {
     const body = res.json();
     expect(body.query).toBe('matematika');
     expect(Array.isArray(body.books)).toBe(true);
-    // Should find Kemdikbud textbook for Matematika
     const hasMath = body.books.some((b: { title: string }) =>
       b.title.toLowerCase().includes('matematika')
     );
@@ -62,5 +61,17 @@ describe('Fastify server endpoints and search integration', () => {
     const body = res.json();
     expect(Array.isArray(body.shelves)).toBe(true);
     expect(body.shelves.length).toBeGreaterThan(0);
+  });
+
+  it('serves SPA index.html on root /', async () => {
+    const server = await buildServer();
+    const res = await server.inject({
+      method: 'GET',
+      url: '/',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.body).toContain('DARFIN BOOK');
   });
 });
