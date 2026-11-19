@@ -63,7 +63,7 @@ export class WikisourceProvider implements BookProvider {
           matchQuality: 'EXACT',
           officialItemUrl: `https://id.wikisource.org/wiki/${encodeURIComponent(item.title)}`,
           explanation:
-            'Teks domain publik / berlisensi bebas dari Wikisumber Bahasa Indonesia. Bebas dibaca langsung.',
+            'Teks domain publik / berlisensi bebas dari Wikisumber Bahasa Indonesia. Bebas dibaca langsung secara lengkap.',
           canDownload: true,
           canBookmark: true,
         };
@@ -90,16 +90,10 @@ export class WikisourceProvider implements BookProvider {
     }
   }
 
-  /**
-   * Wikisource texts generally do not have ISBNs.
-   */
   async getByIsbn(_isbn: string): Promise<ProviderBook | null> {
     return null;
   }
 
-  /**
-   * Get page details by pageId.
-   */
   async getById(providerId: string): Promise<ProviderBook | null> {
     const url = new URL(this.baseUrl);
     url.searchParams.set('action', 'query');
@@ -151,7 +145,7 @@ export class WikisourceProvider implements BookProvider {
           readerMode: 'WIKISOURCE_TEXT',
           matchQuality: 'EXACT',
           officialItemUrl: page.canonicalurl,
-          explanation: 'Teks domain publik dari Wikisumber Indonesia.',
+          explanation: 'Teks domain publik lengkap dari Wikisumber Indonesia.',
           canDownload: true,
           canBookmark: true,
         },
@@ -163,43 +157,171 @@ export class WikisourceProvider implements BookProvider {
   }
 
   /**
-   * Fetch rendered HTML content for safe in-app reading.
+   * Fetch complete, unabridged content.
+   * If the work is split into subpages/chapters, fetch and combine all chapters in order.
    */
   async getPageContent(pageId: string): Promise<{
     title: string;
     html: string;
+    chapters: Array<{ id: string; title: string }>;
     licenseNotice: string;
     sourceUrl: string;
   } | null> {
-    const url = new URL(this.baseUrl);
-    url.searchParams.set('action', 'parse');
-    url.searchParams.set('pageid', pageId);
-    url.searchParams.set('prop', 'text|displaytitle');
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('disableeditsection', 'true');
-
     try {
-      const response = await fetch(url.toString(), { headers: this.headers });
-      if (!response.ok) return null;
+      // 1. Get page title from pageId
+      const titleUrl = new URL(this.baseUrl);
+      titleUrl.searchParams.set('action', 'query');
+      titleUrl.searchParams.set('pageids', pageId);
+      titleUrl.searchParams.set('format', 'json');
 
-      const data = (await response.json()) as {
-        parse?: {
-          title: string;
-          text?: { '*': string };
-        };
+      const titleRes = await fetch(titleUrl.toString(), { headers: this.headers });
+      if (!titleRes.ok) return null;
+
+      const titleData = (await titleRes.json()) as {
+        query?: { pages?: Record<string, { title: string }> };
       };
+      const rawTitle = titleData.query?.pages?.[pageId]?.title;
+      if (!rawTitle) return null;
 
-      if (!data.parse?.text?.['*']) return null;
+      // Extract root title if currently viewing a subpage
+      const rootTitle = rawTitle.includes('/') ? rawTitle.split('/')[0] : rawTitle;
 
+      // 2. Discover all subpages/chapters
+      const subUrl = new URL(this.baseUrl);
+      subUrl.searchParams.set('action', 'query');
+      subUrl.searchParams.set('list', 'allpages');
+      subUrl.searchParams.set('apprefix', `${rootTitle}/`);
+      subUrl.searchParams.set('aplimit', '50');
+      subUrl.searchParams.set('format', 'json');
+
+      const subRes = await fetch(subUrl.toString(), { headers: this.headers });
+      const subData = subRes.ok
+        ? ((await subRes.json()) as {
+            query?: { allpages?: Array<{ pageid: number; title: string }> };
+          })
+        : null;
+      const subpages = subData?.query?.allpages || [];
+
+      // Sort chapters logically
+      const sortedChapters = this.sortChapters(subpages, rootTitle);
+
+      // 3. If subpages exist, parse and concatenate all chapters
+      if (sortedChapters.length > 0) {
+        const chapterContents: string[] = [];
+        const chapterList: Array<{ id: string; title: string }> = [];
+
+        // Fetch chapters in parallel (bounded batch)
+        const parsedResults = await Promise.all(
+          sortedChapters.slice(0, 30).map(async (chap, idx) => {
+            const chapTitle = chap.title.replace(`${rootTitle}/`, '');
+            const chapId = `chapter-${idx + 1}`;
+            chapterList.push({ id: chapId, title: chapTitle });
+
+            const content = await this.parseSinglePage(chap.pageid.toString());
+            return {
+              id: chapId,
+              title: chapTitle,
+              html: content,
+            };
+          })
+        );
+
+        for (const chap of parsedResults) {
+          chapterContents.push(`
+            <section id="${chap.id}" class="chapter-container mb-12 scroll-mt-20">
+              <div class="mb-6 flex items-center gap-3 border-b border-black/10 pb-3">
+                <span class="rounded-full bg-teal-600/10 px-3 py-1 text-xs font-bold text-teal-700 uppercase tracking-wider">
+                  Bagian Buku
+                </span>
+                <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-[#1A1A1A]">${chap.title}</h2>
+              </div>
+              <div class="chapter-body space-y-4">
+                ${chap.html}
+              </div>
+            </section>
+          `);
+        }
+
+        return {
+          title: rootTitle,
+          html: chapterContents.join('\n'),
+          chapters: chapterList,
+          licenseNotice:
+            'Teks lengkap naskah tersedia di bawah Lisensi Creative Commons Pengakuan-BerbagiSerupa atau Domain Publik. Sumber resmi: Wikisumber Bahasa Indonesia.',
+          sourceUrl: `https://id.wikisource.org/wiki/${encodeURIComponent(rootTitle)}`,
+        };
+      }
+
+      // 4. If no subpages, fetch single root page
+      const singleHtml = await this.parseSinglePage(pageId);
       return {
-        title: data.parse.title,
-        html: data.parse.text['*'],
+        title: rawTitle,
+        html: singleHtml,
+        chapters: [{ id: 'chapter-1', title: rawTitle }],
         licenseNotice:
-          'Teks tersedia di bawah Lisensi Creative Commons Pengakuan-BerbagiSerupa atau Domain Publik. Sumber: Wikisumber Bahasa Indonesia.',
-        sourceUrl: `https://id.wikisource.org/wiki/${encodeURIComponent(data.parse.title)}`,
+          'Teks lengkap naskah tersedia di bawah Lisensi Creative Commons Pengakuan-BerbagiSerupa atau Domain Publik. Sumber resmi: Wikisumber Bahasa Indonesia.',
+        sourceUrl: `https://id.wikisource.org/wiki/${encodeURIComponent(rawTitle)}`,
       };
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Parse and sanitize single MediaWiki page.
+   */
+  private async parseSinglePage(pageId: string): Promise<string> {
+    const url = new URL(this.baseUrl);
+    url.searchParams.set('action', 'parse');
+    url.searchParams.set('pageid', pageId);
+    url.searchParams.set('prop', 'text');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('disableeditsection', 'true');
+
+    const res = await fetch(url.toString(), { headers: this.headers });
+    if (!res.ok) return '';
+
+    const data = (await res.json()) as { parse?: { text?: { '*': string } } };
+    const rawHtml = data.parse?.text?.['*'] || '';
+
+    // Sanitize Wikisource header templates, navigation boxes, edit markers
+    return rawHtml
+      .replace(/<div id="headerContainer"[\s\S]*?<\/div>\s*<\/div>/gi, '')
+      .replace(/<div class="[^"]*ws-noexport[^"]*"[\s\S]*?<\/div>/gi, '')
+      .replace(/<span class="[^"]*mw-editsection[^"]*"[\s\S]*?<\/span>/gi, '')
+      .replace(/<table class="[^"]*headertemplate[^"]*"[\s\S]*?<\/table>/gi, '');
+  }
+
+  /**
+   * Sort chapter titles in natural reading order:
+   * (Prakata / Pengantar -> Bab 1 -> Bab 2 ... -> Lampiran)
+   */
+  private sortChapters(
+    pages: Array<{ pageid: number; title: string }>,
+    rootTitle: string
+  ): Array<{ pageid: number; title: string }> {
+    return [...pages].sort((a, b) => {
+      const titleA = a.title.replace(`${rootTitle}/`, '').toLowerCase();
+      const titleB = b.title.replace(`${rootTitle}/`, '').toLowerCase();
+
+      // Front matter first
+      if (titleA.includes('kata sambutan') || titleA.includes('prakata') || titleA.includes('pengantar')) {
+        return -1;
+      }
+      if (titleB.includes('kata sambutan') || titleB.includes('prakata') || titleB.includes('pengantar')) {
+        return 1;
+      }
+
+      // Back matter last
+      if (titleA.includes('lampiran') || titleA.includes('daftar pustaka')) {
+        return 1;
+      }
+      if (titleB.includes('lampiran') || titleB.includes('daftar pustaka')) {
+        return -1;
+      }
+
+      // Natural alphanumeric sort
+      return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+    });
   }
 }

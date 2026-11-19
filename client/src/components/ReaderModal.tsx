@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   X,
-  Type,
   Sun,
   Moon,
   Coffee,
@@ -9,7 +8,9 @@ import {
   ShieldAlert,
   ZoomIn,
   ZoomOut,
-  Maximize2,
+  List,
+  ChevronDown,
+  BookOpen,
 } from 'lucide-react';
 import { resolveReader, getWikisourceContent } from '../api.js';
 import type { Book, ReaderResolution } from '../types.js';
@@ -23,13 +24,15 @@ type ReaderTheme = 'paper' | 'sepia' | 'dark';
 
 export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
   const [resolution, setResolution] = useState<ReaderResolution | null>(null);
+  const [chapters, setChapters] = useState<Array<{ id: string; title: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Reader Settings
   const [theme, setTheme] = useState<ReaderTheme>('paper');
-  const [fontSize, setFontSize] = useState(18); // Default 18px per spec 6.1.1
+  const [fontSize, setFontSize] = useState(18); // Default 18px
   const [isSerif, setIsSerif] = useState(true);
+  const [showToc, setShowToc] = useState(false);
 
   // Load resolution on mount
   useEffect(() => {
@@ -46,6 +49,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
           const wikiData = await getWikisourceContent(book.providerId);
           res.contentHtml = wikiData.html;
           res.licenseNotice = wikiData.licenseNotice;
+          if ((wikiData as unknown as { chapters?: Array<{ id: string; title: string }> }).chapters) {
+            setChapters((wikiData as unknown as { chapters: Array<{ id: string; title: string }> }).chapters);
+          }
         }
 
         if (isMounted) {
@@ -75,6 +81,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
     dark: 'theme-dark',
   };
 
+  const scrollToChapter = (chapterId: string) => {
+    const el = document.getElementById(chapterId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+      setShowToc(false);
+    }
+  };
+
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${themeClasses[theme]}`}>
       {/* Top Controls Bar */}
@@ -87,7 +101,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="max-w-md truncate">
+          <div className="max-w-xs sm:max-w-md truncate">
             <h1 className="text-sm font-bold truncate">{book.title}</h1>
             <p className="text-xs opacity-70 truncate">{book.authors.join(', ')}</p>
           </div>
@@ -95,6 +109,39 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
 
         {/* Reader Customizer Controls */}
         <div className="flex items-center gap-2">
+          {/* Table of Contents for multi-chapter books */}
+          {chapters.length > 1 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowToc(!showToc)}
+                className="flex items-center gap-1.5 rounded-lg border border-black/15 bg-black/5 px-2.5 py-1 text-xs font-semibold hover:bg-black/10 transition"
+                title="Daftar Bab & Bagian Buku"
+              >
+                <List className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Daftar Bab ({chapters.length})</span>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+
+              {showToc && (
+                <div className="absolute right-0 top-full mt-2 w-64 max-h-80 overflow-y-auto rounded-xl border border-black/15 bg-white p-2 shadow-2xl z-50 text-[#1A1A1A]">
+                  <h4 className="px-2 py-1 text-xs font-bold text-stone-400 uppercase tracking-wider">
+                    Daftar Bab / Bagian
+                  </h4>
+                  {chapters.map((chap, idx) => (
+                    <button
+                      key={chap.id}
+                      onClick={() => scrollToChapter(chap.id)}
+                      className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs hover:bg-teal-50 hover:text-teal-700 transition truncate"
+                    >
+                      <span className="font-mono text-stone-400 mr-1.5">{idx + 1}.</span>
+                      {chap.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Font Family Toggle */}
           <button
             onClick={() => setIsSerif(!isSerif)}
@@ -157,7 +204,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
         {loading && (
           <div className="flex h-full flex-col items-center justify-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
-            <span className="text-sm">Menyiapkan buku...</span>
+            <span className="text-sm font-medium">Memuat isi lengkap buku...</span>
           </div>
         )}
 
@@ -181,8 +228,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
         )}
 
         {!loading && !error && resolution && (
-          <div className="mx-auto max-w-3xl">
-            {/* 1. Wikisource Clean Text Mode */}
+          <div className="mx-auto max-w-4xl">
+            {/* 1. Wikisource Clean Complete Text Mode */}
             {resolution.mode === 'WIKISOURCE_TEXT' && resolution.contentHtml && (
               <article
                 className={`prose max-w-none transition-all leading-relaxed ${
@@ -190,25 +237,26 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
                 }`}
                 style={{
                   fontSize: `${fontSize}px`,
-                  lineHeight: '1.75',
+                  lineHeight: '1.85',
                 }}
               >
+                {/* Complete Unabridged Text */}
                 <div
                   dangerouslySetInnerHTML={{ __html: resolution.contentHtml }}
-                  className="space-y-4"
+                  className="space-y-6"
                 />
 
                 {/* License Attribution Footer */}
-                <footer className="mt-12 border-t border-black/10 pt-4 text-xs opacity-70">
-                  <p className="font-semibold">Informasi Lisensi & Sumber:</p>
-                  <p>{resolution.licenseNotice}</p>
+                <footer className="mt-16 border-t border-black/10 pt-6 text-xs opacity-75">
+                  <p className="font-bold text-sm">Informasi Lisensi & Sumber Naskah:</p>
+                  <p className="mt-1">{resolution.licenseNotice}</p>
                   <p className="mt-1">
-                    Tautan asli:{' '}
+                    Tautan naskah asli:{' '}
                     <a
                       href={resolution.launchUrl}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="underline text-teal-600"
+                      className="underline text-teal-600 font-semibold"
                     >
                       Wikisumber Bahasa Indonesia
                     </a>
@@ -217,31 +265,49 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
               </article>
             )}
 
-            {/* 2. Provider Reader / PDF / External Embed */}
+            {/* 2. Interactive Embedded Full Book Reader (Internet Archive / Google Books) */}
             {(resolution.mode === 'PROVIDER_READER' ||
               resolution.mode === 'INTERNAL_PDF' ||
               resolution.mode === 'GOOGLE_EMBEDDED') && (
-              <div className="flex flex-col items-center justify-center py-6 text-center">
-                <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-white/50 p-6 backdrop-blur-xs">
-                  <h3 className="text-base font-bold text-teal-700">Akses Buku Resmi Tersedia</h3>
-                  <p className="mt-2 text-sm leading-relaxed opacity-80">
-                    {resolution.explanation}
-                  </p>
-
-                  <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                    {resolution.launchUrl && (
-                      <a
-                        href={resolution.launchUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-teal-700 transition"
-                      >
-                        <span>Buka Pembaca Resmi ({book.provider.toUpperCase()})</span>
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    )}
+              <div className="flex flex-col gap-4">
+                {/* Reader Chrome Header */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 bg-white/60 p-3 backdrop-blur-xs text-xs">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-teal-600" />
+                    <span className="font-bold text-teal-800">
+                      Pembaca Resmi Buku Lengkap (Halaman per Halaman)
+                    </span>
                   </div>
+
+                  {resolution.launchUrl && (
+                    <a
+                      href={resolution.launchUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex items-center gap-1.5 font-semibold text-teal-700 hover:underline"
+                    >
+                      <span>Buka di Tab Baru</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
                 </div>
+
+                {/* Live Embedded BookReader Frame */}
+                {resolution.launchUrl ? (
+                  <div className="relative w-full h-[78vh] rounded-2xl overflow-hidden border border-black/15 bg-stone-900 shadow-2xl">
+                    <iframe
+                      src={resolution.launchUrl}
+                      title={book.title}
+                      className="h-full w-full border-0"
+                      allow="fullscreen; clipboard-write; encrypted-media"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div className="p-8 text-center">
+                    <p className="text-sm">{resolution.explanation}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

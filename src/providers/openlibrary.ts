@@ -204,9 +204,9 @@ export class OpenLibraryProvider implements BookProvider {
         readerMode: 'PROVIDER_READER',
         matchQuality: 'EXACT',
         officialItemUrl: iaKey
-          ? `https://archive.org/details/${iaKey}`
+          ? `https://archive.org/embed/${iaKey}`
           : `https://openlibrary.org${doc.key}`,
-        explanation: 'Buku domain publik / akses terbuka, dapat dibaca gratis.',
+        explanation: 'Buku lengkap domain publik / akses terbuka. Dapat dibaca lengkap langsung dari halaman pertama hingga terakhir.',
         canDownload: true,
         canBookmark: true,
       };
@@ -217,8 +217,10 @@ export class OpenLibraryProvider implements BookProvider {
         status: 'BORROW_AVAILABLE',
         readerMode: 'PROVIDER_READER',
         matchQuality: 'EXACT',
-        officialItemUrl: `https://openlibrary.org${doc.key}`,
-        explanation: 'Tersedia untuk dipinjam secara resmi (Controlled Digital Lending).',
+        officialItemUrl: iaKey
+          ? `https://archive.org/embed/${iaKey}`
+          : `https://openlibrary.org${doc.key}`,
+        explanation: 'Tersedia untuk dipinjam dan dibaca lengkap resmi (Controlled Digital Lending).',
         canDownload: false,
         canBookmark: true,
       };
@@ -294,11 +296,16 @@ export class OpenLibraryProvider implements BookProvider {
         explanation = 'Akses dibatasi oleh penyedia/penerbit.';
       }
 
+      let embedItemUrl = item.itemURL;
+      if (embedItemUrl && embedItemUrl.includes('archive.org/details/')) {
+        embedItemUrl = embedItemUrl.replace('archive.org/details/', 'archive.org/embed/');
+      }
+
       return {
         status,
         readerMode,
         matchQuality: item.match === 'similar' ? 'SIMILAR' : 'EXACT',
-        officialItemUrl: item.itemURL,
+        officialItemUrl: embedItemUrl,
         explanation,
         canDownload: status === 'FULL_ACCESS',
         canBookmark: status === 'FULL_ACCESS' || status === 'BORROW_AVAILABLE',
