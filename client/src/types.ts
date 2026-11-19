@@ -33,7 +33,7 @@ export interface ProviderAccess {
 }
 
 export interface Book {
-  provider: 'openlibrary' | 'googlebooks' | 'wikisource' | 'kemdikbud';
+  provider: 'openlibrary' | 'googlebooks' | 'wikisource' | 'kemdikbud' | 'internetarchive';
   providerId: string;
   providerWorkId?: string;
   title: string;

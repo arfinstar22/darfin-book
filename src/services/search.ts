@@ -1,4 +1,5 @@
 import { GoogleBooksProvider } from '../providers/googlebooks.js';
+import { InternetArchiveProvider } from '../providers/internetarchive.js';
 import { KemdikbudProvider } from '../providers/kemdikbud.js';
 import { OpenLibraryProvider } from '../providers/openlibrary.js';
 import type { BookSearchQuery, ProviderBook } from '../providers/types.js';
@@ -7,6 +8,7 @@ import { validateIsbn } from '../utils/isbn.js';
 
 export class SearchService {
   private openLibrary = new OpenLibraryProvider();
+  private internetArchive = new InternetArchiveProvider();
   private wikisource = new WikisourceProvider();
   private googleBooks = new GoogleBooksProvider();
   private kemdikbud = new KemdikbudProvider();
@@ -37,19 +39,23 @@ export class SearchService {
     }
 
     // 2. Multi-provider parallel search
-    const [kemdikbudRes, wikisourceRes, openLibraryRes, googleBooksRes] =
+    const [openLibraryRes, iaRes, kemdikbudRes, wikisourceRes, googleBooksRes] =
       await Promise.allSettled([
+        this.openLibrary.search(query),
+        this.internetArchive.search(query),
         this.kemdikbud.search(query),
         this.wikisource.search(query),
-        this.openLibrary.search(query),
         this.googleBooks.search(query),
       ]);
 
     const collected: ProviderBook[] = [];
 
-    // Prioritize OpenLibrary, GoogleBooks, Kemdikbud, then Wikisource for rich metadata & covers
+    // Prioritize OpenLibrary, InternetArchive, Kemdikbud, then Wikisource for rich metadata & covers
     if (openLibraryRes.status === 'fulfilled') {
       collected.push(...openLibraryRes.value);
+    }
+    if (iaRes.status === 'fulfilled') {
+      collected.push(...iaRes.value);
     }
     if (kemdikbudRes.status === 'fulfilled') {
       collected.push(...kemdikbudRes.value);
