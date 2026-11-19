@@ -321,50 +321,103 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               </article>
             )}
 
-            {/* 2. Interactive Embedded Full Book Reader (Internet Archive / Google Books) */}
-            {(resolution.mode === 'PROVIDER_READER' ||
-              resolution.mode === 'INTERNAL_PDF' ||
-              resolution.mode === 'GOOGLE_EMBEDDED') && (
-              <div className="flex flex-col gap-4">
-                {/* Reader Chrome Header */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 bg-white/60 p-3 backdrop-blur-xs text-xs">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-teal-600" />
-                    <span className="font-bold text-teal-800">
-                      Pembaca Resmi Buku Lengkap (Halaman per Halaman)
-                    </span>
+            {/* 2. Official Kemendikdasmen / Kemdikbud Textbook Portal View */}
+            {(book.provider === 'kemdikbud' ||
+              resolution.launchUrl?.includes('kemendikdasmen.go.id') ||
+              resolution.launchUrl?.includes('kemdikbud.go.id')) ? (
+              <div className="mx-auto max-w-xl py-6">
+                <div className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:bg-slate-900/80 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 mb-4">
+                    <BookOpen className="h-8 w-8" />
                   </div>
 
-                  {resolution.launchUrl && (
-                    <a
-                      href={resolution.launchUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="flex items-center gap-1.5 font-semibold text-teal-700 hover:underline"
+                  <span className="inline-block rounded-full bg-teal-100 dark:bg-teal-900/60 px-3 py-1 text-xs font-bold text-teal-800 dark:text-teal-300">
+                    Buku Pelajaran Resmi Kurikulum Merdeka
+                  </span>
+
+                  <h2 className="mt-3 text-lg font-bold sm:text-xl text-stone-900 dark:text-white">
+                    {book.title}
+                  </h2>
+                  <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+                    Penerbit: {book.publisher || 'Kementerian Pendidikan Dasar dan Menengah RI'}
+                  </p>
+
+                  <div className="mt-6 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 p-4 text-left text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                    <p className="font-semibold mb-1">Akses Resmi & Aman SIBI Kemendikdasmen:</p>
+                    <p>
+                      Sesuai protokol keamanan portal pemerintah Kemendikdasmen RI, naskah resmi dan reader interaktif dapat dibaca secara resmi langsung melalui Sistem Informasi Perbukuan Indonesia (SIBI). Akses 100% gratis untuk seluruh siswa dan pendidik di Indonesia.
+                    </p>
+                  </div>
+
+                  <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    {resolution.launchUrl && (
+                      <a
+                        href={resolution.launchUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-xs font-bold text-white hover:bg-teal-700 shadow-md shadow-teal-600/20 transition"
+                      >
+                        <span>Buka Buku di Portal Resmi SIBI</span>
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleBookmarkClick}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-semibold hover:bg-stone-50 dark:hover:bg-slate-700 transition"
                     >
-                      <span>Buka di Tab Baru</span>
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+                      <Bookmark className="h-4 w-4 text-teal-600" />
+                      <span>{bookmarkSavedToast ? 'Tersimpan ke Rak!' : 'Tandai Buku Ini'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* 3. Interactive Embedded Full Book Reader (Internet Archive / Google Books) */
+              (resolution.mode === 'PROVIDER_READER' ||
+                resolution.mode === 'INTERNAL_PDF' ||
+                resolution.mode === 'GOOGLE_EMBEDDED') && (
+                <div className="flex flex-col gap-4">
+                  {/* Reader Chrome Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-black/10 bg-white/60 p-3 backdrop-blur-xs text-xs">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-teal-600" />
+                      <span className="font-bold text-teal-800">
+                        Pembaca Resmi Buku Lengkap (Halaman per Halaman)
+                      </span>
+                    </div>
+
+                    {resolution.launchUrl && (
+                      <a
+                        href={resolution.launchUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="flex items-center gap-1.5 font-semibold text-teal-700 hover:underline"
+                      >
+                        <span>Buka di Tab Baru</span>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Live Embedded BookReader Frame */}
+                  {resolution.launchUrl ? (
+                    <div className="relative w-full h-[78vh] rounded-2xl overflow-hidden border border-black/15 bg-stone-900 shadow-2xl">
+                      <iframe
+                        src={resolution.launchUrl}
+                        title={book.title}
+                        className="h-full w-full border-0"
+                        allow="fullscreen; clipboard-write; encrypted-media"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <p className="text-sm">{resolution.explanation}</p>
+                    </div>
                   )}
                 </div>
-
-                {/* Live Embedded BookReader Frame */}
-                {resolution.launchUrl ? (
-                  <div className="relative w-full h-[78vh] rounded-2xl overflow-hidden border border-black/15 bg-stone-900 shadow-2xl">
-                    <iframe
-                      src={resolution.launchUrl}
-                      title={book.title}
-                      className="h-full w-full border-0"
-                      allow="fullscreen; clipboard-write; encrypted-media"
-                      allowFullScreen
-                    />
-                  </div>
-                ) : (
-                  <div className="p-8 text-center">
-                    <p className="text-sm">{resolution.explanation}</p>
-                  </div>
-                )}
-              </div>
+              )
             )}
           </div>
         )}

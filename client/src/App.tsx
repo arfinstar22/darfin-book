@@ -26,6 +26,8 @@ import { LoginModal } from './components/LoginModal.js';
 import { Navbar } from './components/Navbar.js';
 import { ReaderModal } from './components/ReaderModal.js';
 import { ShelfView } from './components/ShelfView.js';
+import { ConfirmDialog } from './components/ConfirmDialog.js';
+import { Toast, type ToastMessage } from './components/Toast.js';
 import type { Book, CuratedShelf, UserProfile, BookmarkItem } from './types.js';
 
 export const App: React.FC = () => {
@@ -121,6 +123,38 @@ export const App: React.FC = () => {
     book: Book;
   } | null>(null);
 
+  // Modern Confirmation Dialog State (Replaces native browser confirm/alert)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type?: 'danger' | 'warning' | 'info';
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'warning',
+    onConfirm: () => {},
+  });
+
+  // Modern Toast Notification System
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'success', title?: string) => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => [...prev, { id, message, type, title }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3500);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
   // Saved Books (Local Storage)
   const [savedBooks, setSavedBooks] = useState<Book[]>(() => {
     try {
@@ -142,11 +176,13 @@ export const App: React.FC = () => {
     }
   }, [savedBooks, favoriteIds, bookmarks]);
 
-  // Check for Google OAuth callback token in URL (?auth_token=...)
+  // Check for Google OAuth callback token in URL (?auth_token=...) and clean legacy error parameters
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const authToken = params.get('auth_token');
+      const errorParam = params.get('error');
+
       if (authToken) {
         setToken(authToken);
         localStorage.setItem('darfin_token', authToken);
@@ -164,6 +200,7 @@ export const App: React.FC = () => {
             };
             setUser(u);
             localStorage.setItem('darfin_user', JSON.stringify(u));
+            addToast(`Selamat datang kembali, ${u.displayName}!`, 'success', 'Berhasil Masuk');
           }
         } catch (e) {
           console.warn('Failed to parse token payload:', e);
@@ -181,13 +218,12 @@ export const App: React.FC = () => {
             }
           })
           .catch(console.error);
+      }
 
-        // Clean query string from browser URL bar
-        const url = new URL(window.location.href);
-        url.searchParams.delete('auth_token');
-        url.searchParams.delete('error');
-        url.searchParams.delete('reason');
-        window.history.replaceState({}, document.title, url.pathname);
+      // Always clean lingering query string from browser URL bar (e.g. error, auth_token, reason)
+      if (window.location.search) {
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
       }
     } catch (e) {
       console.warn('OAuth URL parse error:', e);
@@ -293,11 +329,13 @@ export const App: React.FC = () => {
             !(b.provider === book.provider && b.providerId === book.providerId)
         )
       );
+      addToast(`"${book.title}" dihapus dari rak buku.`, 'info');
       if (token) {
         removeBookFromShelfApi(book.provider, book.providerId, token).catch(console.error);
       }
     } else {
       setSavedBooks((prev) => [book, ...prev]);
+      addToast(`"${book.title}" ditambahkan ke rak buku.`, 'success');
       if (token) {
         saveBookToShelfApi(book, token).catch(console.error);
       }
@@ -318,8 +356,10 @@ export const App: React.FC = () => {
 
     if (wasFavorite) {
       setFavoriteIds((prev) => prev.filter((id) => id !== bookKey));
+      addToast(`"${book.title}" dihapus dari favorit.`, 'info');
     } else {
       setFavoriteIds((prev) => [...prev, bookKey]);
+      addToast(`"${book.title}" ditandai sebagai favorit!`, 'success');
       if (!savedBooks.some((b) => b.provider === book.provider && b.providerId === book.providerId)) {
         setSavedBooks((prev) => [book, ...prev]);
       }
@@ -354,6 +394,7 @@ export const App: React.FC = () => {
     };
 
     setBookmarks((prev) => [newBookmark, ...prev]);
+    addToast('Pembatas bacaan berhasil disimpan.', 'success');
 
     if (token) {
       try {
@@ -369,6 +410,7 @@ export const App: React.FC = () => {
 
   const handleDeleteBookmark = async (bookmarkId: string) => {
     setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+    addToast('Pembatas halaman dihapus.', 'info');
     if (token) {
       deleteBookmarkApi(bookmarkId, token).catch(console.error);
     }
@@ -383,6 +425,7 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+    addToast(`Selamat datang, ${newUser.displayName}!`, 'success', 'Login Berhasil');
 
     // Process pending action
     if (pendingBookAction) {
@@ -390,47 +433,78 @@ export const App: React.FC = () => {
       if (type === 'save') {
         setSavedBooks((prev) => [book, ...prev.filter(b => !(b.provider === book.provider && b.providerId === book.providerId))]);
         saveBookToShelfApi(book, newToken).catch(console.error);
+        addToast(`"${book.title}" berhasil disimpan ke rak.`, 'success');
       } else if (type === 'favorite') {
         const key = `${book.provider}:${book.providerId}`;
         setFavoriteIds((prev) => [...prev.filter(id => id !== key), key]);
         setSavedBooks((prev) => [book, ...prev.filter(b => !(b.provider === book.provider && b.providerId === book.providerId))]);
         toggleFavoriteBookApi(book, newToken).catch(console.error);
+        addToast(`"${book.title}" ditambahkan ke favorit.`, 'success');
       }
       setPendingBookAction(null);
     }
   };
 
   const handleLogout = () => {
-    if (confirm('Keluar dari Akun Google?')) {
-      setUser(null);
-      setToken(null);
-      try {
-        localStorage.removeItem('darfin_user');
-        localStorage.removeItem('darfin_token');
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Keluar dari Akun Google?',
+      message: 'Sesi akun Anda akan ditutup. Riwayat baca dan rak yang tersinkronisasi tetap aman di server.',
+      type: 'danger',
+      confirmLabel: 'Ya, Keluar Akun',
+      cancelLabel: 'Batal',
+      onConfirm: () => {
+        setUser(null);
+        setToken(null);
+        try {
+          localStorage.removeItem('darfin_user');
+          localStorage.removeItem('darfin_token');
+        } catch (e) {
+          console.error(e);
+        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        addToast('Anda telah keluar dari akun Google.', 'info');
+      },
+    });
   };
 
   const handleClearShelf = () => {
-    if (confirm('Kosongkan semua buku yang tersimpan di rak?')) {
-      setSavedBooks([]);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Kosongkan Rak Buku?',
+      message: 'Semua buku yang tersimpan di rak lokal akan dikosongkan. Anda yakin?',
+      type: 'warning',
+      confirmLabel: 'Kosongkan Rak',
+      cancelLabel: 'Batal',
+      onConfirm: () => {
+        setSavedBooks([]);
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        addToast('Rak buku berhasil dikosongkan.', 'info');
+      },
+    });
   };
 
   const handleClearAllData = () => {
-    if (confirm('Hapus seluruh data lokal dan riwayat di peramban ini?')) {
-      localStorage.clear();
-      setSavedBooks([]);
-      setFavoriteIds([]);
-      setBookmarks([]);
-      setUser(null);
-      setToken(null);
-      setSearchResults(null);
-      setSearchQuery('');
-      alert('Data lokal berhasil dibersihkan.');
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus Semua Data & Riwayat?',
+      message: 'Semua data lokal termasuk rak, bookmark, dan sesi akun pada peramban ini akan dibersihkan.',
+      type: 'danger',
+      confirmLabel: 'Hapus Seluruh Data',
+      cancelLabel: 'Batal',
+      onConfirm: () => {
+        localStorage.clear();
+        setSavedBooks([]);
+        setFavoriteIds([]);
+        setBookmarks([]);
+        setUser(null);
+        setToken(null);
+        setSearchResults(null);
+        setSearchQuery('');
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        addToast('Seluruh data lokal berhasil dibersihkan.', 'success');
+      },
+    });
   };
 
   const isBookSaved = (book: Book) =>
@@ -627,6 +701,15 @@ export const App: React.FC = () => {
               setSearchQuery(catQuery);
               handleSearch(catQuery, freeOnly);
             }}
+            onBookSelect={setSelectedBook}
+            onReadBook={setActiveReadingBook}
+            onToggleFavorite={handleToggleFavorite}
+            favoriteIds={favoriteIds}
+            isLoggedIn={Boolean(user)}
+            onRequestLogin={(reason) => {
+              setLoginReason(reason);
+              setIsLoginModalOpen(true);
+            }}
           />
         )}
 
@@ -717,6 +800,21 @@ export const App: React.FC = () => {
         }}
         savedCount={savedBooks.length}
       />
+
+      {/* Custom Modern Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Floating Toast Notification Stack */}
+      <Toast toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 };
