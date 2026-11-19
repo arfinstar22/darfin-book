@@ -72,6 +72,10 @@ export interface ReaderResolution {
   licenseNotice?: string;
   canBookmark: boolean;
   canDownload: boolean;
+  iaIdentifier?: string;
+  totalPages?: number;
+  pdfUrl?: string;
+  pageTemplateUrl?: string;
 }
 
 export interface UserProfile {
