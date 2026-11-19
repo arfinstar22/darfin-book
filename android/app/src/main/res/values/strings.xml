@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DARFIN BOOK</string>
+    <string name="title_activity_main">DARFIN BOOK</string>
+    <string name="package_name">id.darfinbook.app</string>
+    <string name="custom_url_scheme">id.darfinbook.app</string>
+</resources>

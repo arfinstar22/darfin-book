@@ -8,3 +8,10 @@ data/
 *.db-wal
 .DS_Store
 coverage/
+.gradle/
+build/
+android/.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab
