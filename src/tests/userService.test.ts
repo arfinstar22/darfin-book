@@ -95,5 +95,27 @@ describe('UserService - Google Authentication & Library Sync', () => {
     await userService.removeBook(auth.user.id, 'wikisource', 'Cerita_Rakyat_Test');
     const libFinal = await userService.getUserLibrary(auth.user.id);
     expect(libFinal.books.some((b) => b.providerId === 'Cerita_Rakyat_Test')).toBe(false);
+
+    // 7. Test syncUserLibrary (bidirectional client-server synchronization)
+    const synced = await userService.syncUserLibrary(auth.user.id, {
+      books: [mockBook],
+      favoriteIds: ['wikisource:Cerita_Rakyat_Test'],
+      bookmarks: [
+        {
+          bookId: 'wikisource:Cerita_Rakyat_Test',
+          locationType: 'WIKISOURCE_SECTION',
+          locationValue: 'Bab 5',
+          label: 'Bookmark Baru dari HP',
+        },
+      ],
+    });
+    expect(synced.books.length).toBe(1);
+    expect(synced.favoriteIds).toContain('wikisource:Cerita_Rakyat_Test');
+    expect(synced.bookmarks.some((b) => b.label === 'Bookmark Baru dari HP')).toBe(true);
+
+    // 8. Test clearShelf
+    await userService.clearShelf(auth.user.id);
+    const clearedLib = await userService.getUserLibrary(auth.user.id);
+    expect(clearedLib.books.length).toBe(0);
   });
 });

@@ -350,6 +350,74 @@ export class UserService {
   }
 
   /**
+   * Clear all books from user's shelf.
+   */
+  async clearShelf(userId: string): Promise<void> {
+    db.delete(userBooks)
+      .where(eq(userBooks.userId, userId))
+      .run();
+  }
+
+  /**
+   * Synchronize entire library: Merges client local data with server data,
+   * returning the combined latest state.
+   */
+  async syncUserLibrary(
+    userId: string,
+    clientData: {
+      books?: ProviderBook[];
+      favoriteIds?: string[];
+      bookmarks?: Array<{
+        id?: string;
+        bookId: string;
+        locationType: string;
+        locationValue: string;
+        label?: string | null;
+      }>;
+    }
+  ): Promise<UserLibraryData> {
+    const clientFavoriteSet = new Set(clientData.favoriteIds || []);
+
+    // 1. Insert/update any books sent by client that don't exist or need updating
+    if (clientData.books && clientData.books.length > 0) {
+      for (const book of clientData.books) {
+        if (!book?.provider || !book?.providerId) continue;
+        const key = `${book.provider}:${book.providerId}`;
+        const isFav = clientFavoriteSet.has(key);
+        await this.saveBook(userId, book, isFav);
+      }
+    }
+
+    // 2. Fetch current server bookmarks to avoid duplicate bookmarks
+    const currentBookmarks = db
+      .select()
+      .from(bookmarks)
+      .where(eq(bookmarks.userId, userId))
+      .all();
+    const serverBmKeys = new Set(currentBookmarks.map((bm) => `${bm.bookId}:${bm.locationValue}`));
+
+    // 3. Sync client bookmarks
+    if (clientData.bookmarks && clientData.bookmarks.length > 0) {
+      for (const bm of clientData.bookmarks) {
+        if (!bm?.bookId || !bm?.locationValue) continue;
+        const key = `${bm.bookId}:${bm.locationValue}`;
+        if (!serverBmKeys.has(key)) {
+          await this.saveBookmark(userId, {
+            bookId: bm.bookId,
+            locationType: bm.locationType || 'PAGE',
+            locationValue: bm.locationValue,
+            label: bm.label || undefined,
+          });
+          serverBmKeys.add(key);
+        }
+      }
+    }
+
+    // 4. Return complete unified library
+    return await this.getUserLibrary(userId);
+  }
+
+  /**
    * Save reading progress for a book.
    */
   async saveReadingProgress(

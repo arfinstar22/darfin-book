@@ -11,6 +11,8 @@ import {
   searchBooks,
   getCuratedShelves,
   fetchUserLibraryApi,
+  syncUserLibraryApi,
+  clearUserShelfApi,
   saveBookToShelfApi,
   removeBookFromShelfApi,
   toggleFavoriteBookApi,
@@ -232,31 +234,74 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Sync library with server when logged in
+  // Bidirectional cloud sync with server when logged in or on window focus
   useEffect(() => {
     if (!token) return;
+
+    let isMounted = true;
+
     async function syncLibrary() {
       try {
-        const lib = await fetchUserLibraryApi(token!);
-        if (lib.books && lib.books.length > 0) {
-          setSavedBooks((prev) => {
-            const map = new Map<string, Book>();
-            for (const b of lib.books) map.set(`${b.provider}:${b.providerId}`, b);
-            for (const b of prev) map.set(`${b.provider}:${b.providerId}`, b);
-            return Array.from(map.values());
-          });
+        let localBooks: Book[] = [];
+        let localFavs: string[] = [];
+        let localBm: BookmarkItem[] = [];
+
+        try {
+          const rawB = localStorage.getItem('darfin_saved_books');
+          if (rawB) localBooks = JSON.parse(rawB);
+          const rawF = localStorage.getItem('darfin_favorites');
+          if (rawF) localFavs = JSON.parse(rawF);
+          const rawM = localStorage.getItem('darfin_bookmarks');
+          if (rawM) localBm = JSON.parse(rawM);
+        } catch (e) {
+          console.warn('Gagal membaca storage lokal:', e);
         }
-        if (lib.favoriteIds) {
-          setFavoriteIds(lib.favoriteIds);
+
+        const unified = await syncUserLibraryApi(
+          {
+            books: localBooks,
+            favoriteIds: localFavs,
+            bookmarks: localBm,
+          },
+          token!
+        );
+
+        if (!isMounted) return;
+
+        if (Array.isArray(unified.books)) {
+          setSavedBooks(unified.books);
+          localStorage.setItem('darfin_saved_books', JSON.stringify(unified.books));
         }
-        if (lib.bookmarks) {
-          setBookmarks(lib.bookmarks);
+        if (Array.isArray(unified.favoriteIds)) {
+          setFavoriteIds(unified.favoriteIds);
+          localStorage.setItem('darfin_favorites', JSON.stringify(unified.favoriteIds));
+        }
+        if (Array.isArray(unified.bookmarks)) {
+          setBookmarks(unified.bookmarks);
+          localStorage.setItem('darfin_bookmarks', JSON.stringify(unified.bookmarks));
         }
       } catch (err) {
         console.error('Gagal sinkronisasi perpustakaan:', err);
       }
     }
+
     syncLibrary();
+
+    // Re-sync when switching back to app window/tab
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible' && token) {
+        syncLibrary();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
   }, [token]);
 
   // Load curated shelves on initial load
@@ -435,6 +480,42 @@ export const App: React.FC = () => {
     }
     addToast(`Selamat datang, ${newUser.displayName}!`, 'success', 'Login Berhasil');
 
+    // Trigger immediate cloud synchronization upon login
+    try {
+      const rawB = localStorage.getItem('darfin_saved_books');
+      const curBooks: Book[] = rawB ? JSON.parse(rawB) : savedBooks;
+      const rawF = localStorage.getItem('darfin_favorites');
+      const curFavs: string[] = rawF ? JSON.parse(rawF) : favoriteIds;
+      const rawM = localStorage.getItem('darfin_bookmarks');
+      const curBm: BookmarkItem[] = rawM ? JSON.parse(rawM) : bookmarks;
+
+      syncUserLibraryApi(
+        {
+          books: curBooks,
+          favoriteIds: curFavs,
+          bookmarks: curBm,
+        },
+        newToken
+      )
+        .then((unified) => {
+          if (Array.isArray(unified.books)) {
+            setSavedBooks(unified.books);
+            localStorage.setItem('darfin_saved_books', JSON.stringify(unified.books));
+          }
+          if (Array.isArray(unified.favoriteIds)) {
+            setFavoriteIds(unified.favoriteIds);
+            localStorage.setItem('darfin_favorites', JSON.stringify(unified.favoriteIds));
+          }
+          if (Array.isArray(unified.bookmarks)) {
+            setBookmarks(unified.bookmarks);
+            localStorage.setItem('darfin_bookmarks', JSON.stringify(unified.bookmarks));
+          }
+        })
+        .catch(console.error);
+    } catch (e) {
+      console.warn('Sync on login error:', e);
+    }
+
     // Process pending action
     if (pendingBookAction) {
       const { type, book } = pendingBookAction;
@@ -480,12 +561,16 @@ export const App: React.FC = () => {
     setConfirmDialog({
       isOpen: true,
       title: 'Kosongkan Rak Buku?',
-      message: 'Semua buku yang tersimpan di rak lokal akan dikosongkan. Anda yakin?',
+      message: 'Semua buku yang tersimpan di rak lokal dan cloud server akan dikosongkan. Anda yakin?',
       type: 'warning',
       confirmLabel: 'Kosongkan Rak',
       cancelLabel: 'Batal',
       onConfirm: () => {
         setSavedBooks([]);
+        localStorage.removeItem('darfin_saved_books');
+        if (token) {
+          clearUserShelfApi(token).catch(console.error);
+        }
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         addToast('Rak buku berhasil dikosongkan.', 'info');
       },

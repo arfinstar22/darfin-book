@@ -583,6 +583,27 @@ export async function buildServer() {
     return library;
   });
 
+  // Bidirectional User Library Sync (reconciles device library with cloud server)
+  server.post('/api/v1/user/sync', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const body = request.body as {
+      books?: ProviderBook[];
+      favoriteIds?: string[];
+      bookmarks?: Array<{
+        id?: string;
+        bookId: string;
+        locationType: string;
+        locationValue: string;
+        label?: string | null;
+      }>;
+    };
+
+    const unifiedLibrary = await userService.syncUserLibrary(session.userId, body || {});
+    return unifiedLibrary;
+  });
+
   // Save book to shelf
   server.post('/api/v1/user/books', async (request, reply) => {
     const session = requireAuth(request, reply);
@@ -595,6 +616,15 @@ export async function buildServer() {
 
     await userService.saveBook(session.userId, body.book, body.isFavorite ?? false);
     return { ok: true, message: 'Buku berhasil disimpan ke rak' };
+  });
+
+  // Clear all books from user's shelf
+  server.delete('/api/v1/user/shelf/clear', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    await userService.clearShelf(session.userId);
+    return { ok: true, message: 'Rak buku berhasil dikosongkan' };
   });
 
   // Remove book from shelf

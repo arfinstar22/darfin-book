@@ -60,6 +60,43 @@ export async function fetchUserLibraryApi(token: string): Promise<{
   return res.json();
 }
 
+export async function syncUserLibraryApi(
+  clientData: {
+    books: Book[];
+    favoriteIds: string[];
+    bookmarks: BookmarkItem[];
+  },
+  token: string
+): Promise<{
+  books: Book[];
+  favoriteIds: string[];
+  bookmarks: BookmarkItem[];
+  progress: ReadingProgressItem[];
+}> {
+  const res = await fetch(`${API_BASE}/user/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(clientData),
+  });
+  if (!res.ok) {
+    throw new Error('Gagal melakukan sinkronisasi perpustakaan ke cloud');
+  }
+  return res.json();
+}
+
+export async function clearUserShelfApi(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/user/shelf/clear`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error('Gagal mengosongkan rak di server');
+  }
+}
+
 export async function saveBookToShelfApi(book: Book, token: string): Promise<void> {
   const res = await fetch(`${API_BASE}/user/books`, {
     method: 'POST',
