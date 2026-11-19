@@ -20,7 +20,6 @@ import {
   Layers,
   Loader2,
   Download,
-  Maximize,
   RotateCcw,
 } from 'lucide-react';
 import { resolveReader, getWikisourceContent } from '../api.js';
@@ -62,10 +61,16 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [currentPage, setCurrentPage] = useState(0);
   const [pageInput, setPageInput] = useState('1');
   const [imageLoading, setImageLoading] = useState(true);
-  const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%, 1.25, 1.5, 1.75, 2.0
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [clientTotalPages, setClientTotalPages] = useState<number | null>(null);
+
+  // 3D Page Flip Animation State
+  const [isFlipping, setIsFlipping] = useState(false);
+  const [flipDirection, setFlipDirection] = useState<'next' | 'prev' | null>(null);
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Reader Settings
   const [theme, setTheme] = useState<ReaderTheme>('paper');
@@ -126,6 +131,19 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       isMounted = false;
     };
   }, [resolution]);
+
+  // Preload adjacent pages for smooth 3D flips
+  useEffect(() => {
+    if (!resolution?.pageTemplateUrl) return;
+    if (currentPage + 1 < totalPages) {
+      const nextImg = new Image();
+      nextImg.src = resolution.pageTemplateUrl.replace('{page}', String(currentPage + 1));
+    }
+    if (currentPage - 1 >= 0) {
+      const prevImg = new Image();
+      prevImg.src = resolution.pageTemplateUrl.replace('{page}', String(currentPage - 1));
+    }
+  }, [currentPage, resolution, totalPages]);
 
   // Sync page input when currentPage changes
   useEffect(() => {
@@ -194,46 +212,69 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, totalPages, zoomLevel]);
+  }, [currentPage, totalPages, zoomLevel, isFlipping]);
 
-  // Touch Swipe Handlers for mobile (active only when not zoomed in)
+  // Touch Swipe Handlers for mobile (with 3D page curl)
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && zoomLevel <= 1 && !isFlipping) {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
+      setIsDragging(true);
+      setDragX(0);
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const diffX = e.changedTouches[0].clientX - touchStartX.current;
-    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || zoomLevel > 1 || !isDragging || isFlipping) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - touchStartX.current;
+    const diffY = currentY - (touchStartY.current || 0);
 
-    // Only trigger horizontal swipe if not zoomed in and horizontal movement > vertical movement
-    if (zoomLevel <= 1 && Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX < -50) {
+    // Track horizontal swipe if horizontal movement is dominant
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      setDragX(diffX);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (zoomLevel <= 1 && isDragging && !isFlipping) {
+      if (dragX < -50) {
         goToNextPage();
-      } else if (diffX > 50) {
+      } else if (dragX > 50) {
         goToPrevPage();
       }
     }
-
     touchStartX.current = null;
     touchStartY.current = null;
+    setIsDragging(false);
+    setDragX(0);
   };
 
+  // 3D Page Turn Forward
   const goToNextPage = () => {
-    if (currentPage < totalPages - 1) {
-      setImageLoading(true);
+    if (currentPage >= totalPages - 1 || isFlipping) return;
+    setFlipDirection('next');
+    setIsFlipping(true);
+    setTimeout(() => {
       setCurrentPage((prev) => prev + 1);
-    }
+      setFlipDirection(null);
+      setIsFlipping(false);
+      setImageLoading(false);
+    }, 360);
   };
 
+  // 3D Page Turn Backward
   const goToPrevPage = () => {
-    if (currentPage > 0) {
-      setImageLoading(true);
+    if (currentPage <= 0 || isFlipping) return;
+    setFlipDirection('prev');
+    setIsFlipping(true);
+    setTimeout(() => {
       setCurrentPage((prev) => prev - 1);
-    }
+      setFlipDirection(null);
+      setIsFlipping(false);
+      setImageLoading(false);
+    }, 360);
   };
 
   // Zoom Helpers
@@ -253,21 +294,20 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     setZoomLevel((prev) => (prev > 1.3 ? 1 : 1.6));
   };
 
-  // Canvas Tap Handler: Distinguishes between Single Tap (toggle controls / flip) and Double Tap (zoom)
+  // Canvas Click Handler: Distinguishes between Single Tap (toggle controls / flip) and Double Tap (zoom)
   const handleCanvasClick = (e: React.MouseEvent, clickX: number, width: number) => {
+    if (isFlipping) return;
     const now = Date.now();
     const isDouble = now - lastTapTime.current < 280;
     lastTapTime.current = now;
 
     if (isDouble) {
       if (tapTimeout.current) clearTimeout(tapTimeout.current);
-      // Double tap toggles between normal (1.0) and enlarged (1.6) for readers with poor eyesight
       setZoomLevel((prev) => (prev > 1.2 ? 1.0 : 1.6));
       return;
     }
 
     tapTimeout.current = setTimeout(() => {
-      // Single Tap Logic:
       if (viewMode === 'single' && zoomLevel <= 1.1) {
         if (clickX < width * 0.2) {
           goToPrevPage();
@@ -369,7 +409,6 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       input: 'bg-stone-100 border border-stone-300 text-[#1A1A1A]',
       slider: 'accent-teal-600',
       tagText: 'text-stone-500',
-      zoomPill: 'bg-white/95 border border-stone-200 text-stone-800 shadow-xl',
     },
     sepia: {
       container: 'bg-[#F4ECD8] text-[#433422]',
@@ -381,7 +420,6 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       input: 'bg-[#EBDDBF] border border-[#C8B68F] text-[#433422]',
       slider: 'accent-[#7A5A35]',
       tagText: 'text-[#7D6B56]',
-      zoomPill: 'bg-[#FAF4E6]/95 border border-[#D5C5A1] text-[#433422] shadow-xl',
     },
     dark: {
       container: 'bg-[#080E1E] text-[#F1F5F9]',
@@ -393,9 +431,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       input: 'bg-slate-800 border border-slate-600 text-white',
       slider: 'accent-teal-500',
       tagText: 'text-slate-400',
-      zoomPill: 'bg-[#0F172A]/95 border border-slate-700 text-white shadow-2xl',
     },
   }[theme];
+
+  // Drag angle calculation for live 3D touch page turn
+  const dragAngle = Math.max(
+    -85,
+    Math.min(85, (dragX / (typeof window !== 'undefined' ? window.innerWidth || 360 : 360)) * 95)
+  );
 
   return (
     <div
@@ -462,7 +505,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 resetZoom();
               }}
               className={`flex h-11 items-center gap-1.5 rounded-2xl px-2.5 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${themeStyles.btnDefault}`}
-              title={viewMode === 'single' ? 'Ganti ke Mode Gulir Vertikal (Scroll)' : 'Ganti ke Mode Halaman Satuan (Flip)'}
+              title={viewMode === 'single' ? 'Ganti ke Mode Gulir Vertikal (Scroll)' : 'Ganti ke Mode Halaman Satuan (Flip 3D)'}
             >
               {viewMode === 'single' ? (
                 <Layers className="h-4 w-4 text-teal-600" />
@@ -546,12 +589,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         </div>
       </header>
 
-      {/* Reader Viewport Area (Takes 100% of Screen, with Dynamic Padding when controls are shown) */}
+      {/* Reader Viewport Area */}
       <main
         className={`fixed inset-0 z-20 flex flex-col overflow-auto transition-all duration-300 ${
           isControlsVisible ? 'pt-16 pb-20' : 'pt-0 pb-0'
         }`}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         {loading && (
@@ -592,11 +636,12 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                   handleCanvasClick(e, clickX, rect.width);
                 }}
               >
-                {/* Mode Lembar (Single Page) */}
+                {/* Mode Lembar: 3D Realistic Paper Flipbook */}
                 {viewMode === 'single' ? (
                   <div
-                    className="relative flex-1 flex items-center justify-center w-full h-full overflow-auto p-1 sm:p-4"
+                    className="relative flex-1 flex items-center justify-center w-full h-full overflow-hidden p-1 sm:p-4"
                     style={{
+                      perspective: '1400px',
                       WebkitOverflowScrolling: 'touch',
                       cursor: zoomLevel > 1.1 ? 'grab' : 'default',
                     }}
@@ -607,7 +652,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         e.stopPropagation();
                         goToPrevPage();
                       }}
-                      disabled={currentPage <= 0}
+                      disabled={currentPage <= 0 || isFlipping}
                       className="hidden sm:flex absolute left-4 z-30 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
                       title="Halaman Sebelumnya"
                     >
@@ -619,14 +664,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         e.stopPropagation();
                         goToNextPage();
                       }}
-                      disabled={currentPage >= totalPages - 1}
+                      disabled={currentPage >= totalPages - 1 || isFlipping}
                       className="hidden sm:flex absolute right-4 z-30 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
                       title="Halaman Selanjutnya"
                     >
                       <ChevronRight className="h-6 w-6" />
                     </button>
 
-                    {/* Page Container with Real Zoom Expansion */}
+                    {/* Page Stage: 3D Layers */}
                     <div
                       className="relative flex items-center justify-center transition-all duration-200"
                       style={
@@ -638,40 +683,115 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                           : { width: '100%', height: '100%' }
                       }
                     >
-                      {imageLoading && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-                          <span className={`text-xs font-medium ${themeStyles.tagText}`}>
-                            Memuat halaman {currentPage + 1}...
-                          </span>
+                      {/* UNDERNEATH PAGE: Revealed during 3D flip forward */}
+                      {isFlipping && flipDirection === 'next' && currentPage + 1 < totalPages && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                          <div className="relative flex items-center justify-center rounded-md overflow-hidden book-spine-shadow shadow-xl">
+                            <img
+                              src={resolution.pageTemplateUrl!.replace('{page}', String(currentPage + 1))}
+                              alt={`Halaman ${currentPage + 2}`}
+                              className={`rounded-md object-contain select-none ${
+                                isControlsVisible
+                                  ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
+                                  : 'max-h-[98vh] w-auto max-w-full'
+                              }`}
+                            />
+                          </div>
                         </div>
                       )}
 
-                      <img
-                        key={currentPage}
-                        src={resolution.pageTemplateUrl!.replace('{page}', String(currentPage))}
-                        alt={`Halaman ${currentPage + 1}`}
-                        onLoad={() => setImageLoading(false)}
-                        onError={() => setImageLoading(false)}
-                        style={
-                          zoomLevel > 1
-                            ? {
-                                width: `${Math.min(zoomLevel * 100, 300)}%`,
-                                maxWidth: 'none',
-                              }
-                            : undefined
-                        }
-                        className={`rounded-md shadow-2xl object-contain select-none transition-all duration-200 ${
-                          imageLoading ? 'opacity-30' : 'opacity-100'
-                        } ${
-                          zoomLevel > 1
-                            ? 'h-auto max-w-none'
-                            : isControlsVisible
-                            ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
-                            : 'max-h-[98vh] w-auto max-w-full'
+                      {/* UNDERNEATH PAGE: Revealed during 3D flip backward */}
+                      {isFlipping && flipDirection === 'prev' && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                          <div className="relative flex items-center justify-center rounded-md overflow-hidden book-spine-shadow shadow-xl">
+                            <img
+                              src={resolution.pageTemplateUrl!.replace('{page}', String(currentPage))}
+                              alt={`Halaman ${currentPage + 1}`}
+                              className={`rounded-md object-contain select-none ${
+                                isControlsVisible
+                                  ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
+                                  : 'max-h-[98vh] w-auto max-w-full'
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ACTIVE / FLIPPING PAGE SHEET */}
+                      <div
+                        className={`relative z-20 flex items-center justify-center transition-all ${
+                          isFlipping && flipDirection === 'next'
+                            ? 'book-page-flip-next'
+                            : isFlipping && flipDirection === 'prev'
+                            ? 'book-page-flip-prev'
+                            : ''
                         }`}
-                        draggable={false}
-                      />
+                        style={{
+                          transformOrigin: 'left center',
+                          transform:
+                            isDragging && zoomLevel <= 1 && Math.abs(dragX) > 10
+                              ? `perspective(1400px) rotateY(${dragAngle}deg)`
+                              : undefined,
+                          transition: isDragging ? 'none' : 'transform 0.25s ease',
+                        }}
+                      >
+                        {imageLoading && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+                            <span className={`text-xs font-medium ${themeStyles.tagText}`}>
+                              Memuat halaman {currentPage + 1}...
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="relative rounded-md overflow-hidden shadow-2xl book-spine-shadow">
+                          <img
+                            key={currentPage}
+                            src={resolution.pageTemplateUrl!.replace(
+                              '{page}',
+                              String(
+                                isFlipping && flipDirection === 'prev' && currentPage > 0
+                                  ? currentPage - 1
+                                  : currentPage
+                              )
+                            )}
+                            alt={`Halaman ${currentPage + 1}`}
+                            onLoad={() => setImageLoading(false)}
+                            onError={() => setImageLoading(false)}
+                            style={
+                              zoomLevel > 1
+                                ? {
+                                    width: `${Math.min(zoomLevel * 100, 300)}%`,
+                                    maxWidth: 'none',
+                                  }
+                                : undefined
+                            }
+                            className={`rounded-md object-contain select-none transition-all duration-200 ${
+                              imageLoading ? 'opacity-30' : 'opacity-100'
+                            } ${
+                              zoomLevel > 1
+                                ? 'h-auto max-w-none'
+                                : isControlsVisible
+                                ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
+                                : 'max-h-[98vh] w-auto max-w-full'
+                            }`}
+                            draggable={false}
+                          />
+
+                          {/* 3D Paper fold lighting/shadow overlay on turn */}
+                          {(isFlipping || (isDragging && Math.abs(dragX) > 10)) && (
+                            <div
+                              className="absolute inset-0 pointer-events-none transition-opacity duration-200"
+                              style={{
+                                background:
+                                  dragX < 0 || flipDirection === 'next'
+                                    ? 'linear-gradient(to right, rgba(0,0,0,0.2) 0%, transparent 40%, rgba(0,0,0,0.25) 100%)'
+                                    : 'linear-gradient(to left, rgba(0,0,0,0.2) 0%, transparent 40%, rgba(0,0,0,0.25) 100%)',
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -690,7 +810,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     >
                       {Array.from({ length: totalPages }, (_, idx) => (
                         <div key={idx} className="w-full flex flex-col items-center">
-                          <div className="relative w-full flex justify-center rounded-xl overflow-hidden shadow-lg border border-black/10">
+                          <div className="relative w-full flex justify-center rounded-xl overflow-hidden shadow-lg border border-black/10 book-spine-shadow">
                             <img
                               src={resolution.pageTemplateUrl!.replace('{page}', String(idx))}
                               alt={`Halaman ${idx + 1}`}
@@ -723,9 +843,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     <>
                       <button
                         onClick={goToPrevPage}
-                        disabled={currentPage <= 0}
+                        disabled={currentPage <= 0 || isFlipping}
                         className="rounded-lg p-1.5 hover:bg-black/10 disabled:opacity-30 transition"
-                        title="Halaman Sebelumnya"
+                        title="Halaman Sebelumnya (3D Flip)"
                       >
                         <ChevronLeft className="h-5 w-5" />
                       </button>
@@ -769,9 +889,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
                       <button
                         onClick={goToNextPage}
-                        disabled={currentPage >= totalPages - 1}
+                        disabled={currentPage >= totalPages - 1 || isFlipping}
                         className="rounded-lg p-1.5 hover:bg-black/10 disabled:opacity-30 transition"
-                        title="Halaman Selanjutnya"
+                        title="Halaman Selanjutnya (3D Flip)"
                       >
                         <ChevronRight className="h-5 w-5" />
                       </button>
@@ -780,7 +900,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     </>
                   )}
 
-                  {/* Zoom Controls (PENTING: Membantu Pembaca Rabun / Teks Kecil) */}
+                  {/* Zoom Controls */}
                   <div className="flex items-center gap-1">
                     <button
                       onClick={zoomOut}

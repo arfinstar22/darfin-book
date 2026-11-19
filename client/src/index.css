@@ -80,3 +80,52 @@
   background-color: #080E1E;
   color: #E2E8F0;
 }
+
+/* Realistic 3D Book Page Flip Animation */
+@keyframes bookFlipNext {
+  0% {
+    transform: perspective(1400px) rotateY(0deg);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+  40% {
+    box-shadow: -25px 12px 40px rgba(0, 0, 0, 0.35);
+  }
+  100% {
+    transform: perspective(1400px) rotateY(-88deg);
+    opacity: 0.15;
+    box-shadow: -45px 15px 50px rgba(0, 0, 0, 0.45);
+  }
+}
+
+@keyframes bookFlipPrev {
+  0% {
+    transform: perspective(1400px) rotateY(-88deg);
+    opacity: 0.15;
+    box-shadow: -45px 15px 50px rgba(0, 0, 0, 0.45);
+  }
+  60% {
+    box-shadow: -25px 12px 40px rgba(0, 0, 0, 0.35);
+  }
+  100% {
+    transform: perspective(1400px) rotateY(0deg);
+    opacity: 1;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.book-page-flip-next {
+  transform-origin: left center;
+  animation: bookFlipNext 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity, box-shadow;
+}
+
+.book-page-flip-prev {
+  transform-origin: left center;
+  animation: bookFlipPrev 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity, box-shadow;
+}
+
+/* Book Spine crease effect */
+.book-spine-shadow {
+  box-shadow: inset 16px 0 24px -12px rgba(0, 0, 0, 0.22);
+}
