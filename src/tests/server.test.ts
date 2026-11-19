@@ -61,6 +61,7 @@ describe('Fastify server endpoints and search integration', () => {
     const body = res.json();
     expect(Array.isArray(body.shelves)).toBe(true);
     expect(body.shelves.length).toBeGreaterThan(0);
+    expect(body.shelves[0].id).toBe('novel-populer');
   }, 30000);
 
   it('serves SPA index.html on root /', async () => {

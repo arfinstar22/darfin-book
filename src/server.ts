@@ -199,17 +199,72 @@ export async function buildServer() {
     return results;
   });
 
-  // Curated Indonesian shelves
-  server.get('/api/v1/curated', async () => {
-    const [textbooks, classics, science, history] = await Promise.all([
-      searchService.search({ query: 'pelajaran', limit: 8, freeOnly: true }),
-      searchService.search({ query: 'cerita', limit: 8, freeOnly: true }),
-      searchService.search({ query: 'matematika', limit: 8, freeOnly: true }),
-      searchService.search({ query: 'sejarah', limit: 8, freeOnly: true }),
-    ]);
+  // Curated Indonesian shelves cache
+  let cachedCurated: {
+    shelves: Array<{ id: string; title: string; subtitle: string; books: ProviderBook[] }>;
+    expiresAt: number;
+  } | null = null;
 
-    return {
-      shelves: [
+  // Curated Indonesian shelves (Novels at top: Tere Liye, Pidi Baiq, etc.)
+  server.get('/api/v1/curated', async () => {
+    if (cachedCurated && Date.now() < cachedCurated.expiresAt) {
+      return { shelves: cachedCurated.shelves };
+    }
+
+    try {
+      const [novelTere, novelPidi, novelAndrea, textbooks, classics, science, history] =
+        await Promise.all([
+          searchService.search({ query: 'Tere Liye', limit: 4, freeOnly: false }),
+          searchService.search({ query: 'Pidi Baiq Dilan', limit: 4, freeOnly: false }),
+          searchService.search({ query: 'Laskar Pelangi Andrea Hirata', limit: 2, freeOnly: false }),
+          searchService.search({ query: 'pelajaran', limit: 8, freeOnly: true }),
+          searchService.search({ query: 'cerita', limit: 8, freeOnly: true }),
+          searchService.search({ query: 'matematika', limit: 8, freeOnly: true }),
+          searchService.search({ query: 'sejarah', limit: 8, freeOnly: true }),
+        ]);
+
+      // Interleave novel authors so Tere Liye, Pidi Baiq, and Andrea Hirata are evenly distributed
+      const seenIds = new Set<string>();
+      const novelBooks: ProviderBook[] = [];
+      const maxLen = Math.max(
+        novelTere.books.length,
+        novelPidi.books.length,
+        novelAndrea.books.length
+      );
+      for (let i = 0; i < maxLen; i++) {
+        const bTere = novelTere.books[i];
+        if (bTere) {
+          const k = `${bTere.provider}:${bTere.providerId}`;
+          if (!seenIds.has(k)) {
+            seenIds.add(k);
+            novelBooks.push(bTere);
+          }
+        }
+        const bPidi = novelPidi.books[i];
+        if (bPidi) {
+          const k = `${bPidi.provider}:${bPidi.providerId}`;
+          if (!seenIds.has(k)) {
+            seenIds.add(k);
+            novelBooks.push(bPidi);
+          }
+        }
+        const bAndrea = novelAndrea.books[i];
+        if (bAndrea) {
+          const k = `${bAndrea.provider}:${bAndrea.providerId}`;
+          if (!seenIds.has(k)) {
+            seenIds.add(k);
+            novelBooks.push(bAndrea);
+          }
+        }
+      }
+
+      const shelves = [
+        {
+          id: 'novel-populer',
+          title: 'Novel Populer & Karya Penulis Favorit (Tere Liye, Pidi Baiq, dll)',
+          subtitle: 'Koleksi novel best seller: Tere Liye, Pidi Baiq (Dilan & Milea), Andrea Hirata, dan karya sastra modern',
+          books: novelBooks,
+        },
         {
           id: 'buku-pelajaran',
           title: 'Buku Teks Pelajaran Resmi (SD, SMP, SMA/SMK)',
@@ -234,8 +289,20 @@ export async function buildServer() {
           subtitle: 'Catatan perjalanan bangsa, biografi tokoh pergerakan, dan peradaban Indonesia',
           books: history.books,
         },
-      ],
-    };
+      ];
+
+      cachedCurated = {
+        shelves,
+        expiresAt: Date.now() + 15 * 60 * 1000, // 15 mins cache
+      };
+
+      return { shelves };
+    } catch (err) {
+      if (cachedCurated) {
+        return { shelves: cachedCurated.shelves };
+      }
+      throw err;
+    }
   });
 
   // Resolve reading mode

@@ -33,6 +33,7 @@ import type { Book, CuratedShelf, UserProfile, BookmarkItem } from './types.js';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
+  const [exploreCategory, setExploreCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Book[] | null>(null);
@@ -625,6 +626,7 @@ export const App: React.FC = () => {
                 onToggleFavorite={handleToggleFavorite}
                 favoriteIds={favoriteIds}
                 onNavigateExplore={(catId) => {
+                  setExploreCategory(catId || 'all');
                   setCurrentTab('explore');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
@@ -640,6 +642,7 @@ export const App: React.FC = () => {
         {/* Tab: Jelajahi */}
         {currentTab === 'explore' && (
           <ExploreView
+            initialCategory={exploreCategory}
             onCategorySelect={(catQuery) => {
               setSearchQuery(catQuery);
               handleSearch(catQuery, freeOnly);

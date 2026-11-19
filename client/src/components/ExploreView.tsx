@@ -17,6 +17,7 @@ import { BookCard } from './BookCard.js';
 import type { Book } from '../types.js';
 
 interface ExploreViewProps {
+  initialCategory?: string;
   onCategorySelect?: (query: string) => void;
   onBookSelect: (book: Book) => void;
   onReadBook: (book: Book) => void;
@@ -86,12 +87,19 @@ const CATEGORIES = [
 ];
 
 export const ExploreView: React.FC<ExploreViewProps> = ({
+  initialCategory,
   onBookSelect,
   onReadBook,
   onToggleFavorite,
   favoriteIds,
 }) => {
-  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [activeCategory, setActiveCategory] = useState<string>(initialCategory || 'all');
+
+  useEffect(() => {
+    if (initialCategory) {
+      setActiveCategory(initialCategory);
+    }
+  }, [initialCategory]);
   const [books, setBooks] = useState<Book[]>([]);
   const [totalCatalogCount, setTotalCatalogCount] = useState<number>(30607);
   const [isLoading, setIsLoading] = useState<boolean>(true);

@@ -14,6 +14,7 @@ import {
   Layers,
   ArrowRight,
   TrendingUp,
+  BookMarked,
 } from 'lucide-react';
 import { BookCard } from './BookCard.js';
 import type { Book, CuratedShelf } from '../types.js';
@@ -109,6 +110,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
             >
               <Compass className="h-4 w-4" />
               <span>Jelajahi 30.000+ Buku</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateExplore('novel')}
+              className="inline-flex items-center gap-2 rounded-2xl border border-purple-400/30 bg-purple-500/20 px-4 py-3 text-xs sm:text-sm font-bold text-purple-200 hover:bg-purple-500/30 backdrop-blur-md transition cursor-pointer"
+            >
+              <BookMarked className="h-4 w-4 text-purple-300" />
+              <span>Novel (Tere Liye, Dilan, dll)</span>
             </button>
 
             <button
@@ -292,7 +302,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (shelf.id.includes('pelajaran')) {
+                    if (shelf.id.includes('novel')) {
+                      onNavigateExplore('novel');
+                    } else if (shelf.id.includes('pelajaran')) {
                       onNavigateExplore('pelajaran');
                     } else if (shelf.id.includes('sastra')) {
                       onNavigateExplore('sastra');
@@ -310,7 +322,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-                {shelf.books.slice(0, 4).map((book) => (
+                {shelf.books.slice(0, 8).map((book) => (
                   <BookCard
                     key={`${book.provider}-${book.providerId}`}
                     book={book}
