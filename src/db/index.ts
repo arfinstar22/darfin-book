@@ -97,6 +97,7 @@ export function initDb() {
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE,
       display_name TEXT,
+      avatar_url TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -112,9 +113,12 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS user_books (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-      edition_id TEXT REFERENCES book_editions(id) ON DELETE CASCADE,
+      book_id TEXT NOT NULL,
+      provider TEXT,
+      provider_id TEXT,
+      book_data TEXT,
       shelf_status TEXT DEFAULT 'SAVED',
+      is_favorite INTEGER DEFAULT 0,
       added_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -122,7 +126,8 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS reading_progress (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      edition_id TEXT NOT NULL REFERENCES book_editions(id) ON DELETE CASCADE,
+      book_id TEXT NOT NULL,
+      edition_id TEXT,
       reader_mode TEXT NOT NULL,
       location_type TEXT NOT NULL,
       location_value TEXT NOT NULL,
@@ -133,7 +138,8 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS bookmarks (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      edition_id TEXT NOT NULL REFERENCES book_editions(id) ON DELETE CASCADE,
+      book_id TEXT NOT NULL,
+      edition_id TEXT,
       location_type TEXT NOT NULL,
       location_value TEXT NOT NULL,
       label TEXT,
@@ -165,4 +171,13 @@ export function initDb() {
       notes TEXT
     );
   `);
+
+  // Safe migrations for added columns
+  try { sqlite.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT;`); } catch {}
+  try { sqlite.exec(`ALTER TABLE user_books ADD COLUMN provider TEXT;`); } catch {}
+  try { sqlite.exec(`ALTER TABLE user_books ADD COLUMN provider_id TEXT;`); } catch {}
+  try { sqlite.exec(`ALTER TABLE user_books ADD COLUMN book_data TEXT;`); } catch {}
+  try { sqlite.exec(`ALTER TABLE user_books ADD COLUMN is_favorite INTEGER DEFAULT 0;`); } catch {}
+  try { sqlite.exec(`ALTER TABLE reading_progress ADD COLUMN book_id TEXT;`); } catch {}
+  try { sqlite.exec(`ALTER TABLE bookmarks ADD COLUMN book_id TEXT;`); } catch {}
 }

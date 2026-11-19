@@ -131,6 +131,7 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').unique(),
   displayName: text('display_name'),
+  avatarUrl: text('avatar_url'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
@@ -159,15 +160,14 @@ export const userBooks = sqliteTable('user_books', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  bookId: text('book_id')
-    .notNull()
-    .references(() => books.id, { onDelete: 'cascade' }),
-  editionId: text('edition_id').references(() => bookEditions.id, {
-    onDelete: 'cascade',
-  }),
+  bookId: text('book_id').notNull(),
+  provider: text('provider'),
+  providerId: text('provider_id'),
+  bookData: text('book_data'), // JSON serialization of ProviderBook
   shelfStatus: text('shelf_status', {
-    enum: ['SAVED', 'WANT_TO_READ', 'READING', 'COMPLETED', 'ABANDONED'],
+    enum: ['SAVED', 'FAVORITE', 'WANT_TO_READ', 'READING', 'COMPLETED', 'ABANDONED'],
   }).default('SAVED'),
+  isFavorite: integer('is_favorite', { mode: 'boolean' }).default(false),
   addedAt: text('added_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
@@ -177,9 +177,8 @@ export const readingProgress = sqliteTable('reading_progress', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  editionId: text('edition_id')
-    .notNull()
-    .references(() => bookEditions.id, { onDelete: 'cascade' }),
+  bookId: text('book_id').notNull(),
+  editionId: text('edition_id'),
   readerMode: text('reader_mode').notNull(),
   locationType: text('location_type', {
     enum: ['PDF_PAGE', 'EPUB_CFI', 'PROVIDER_POSITION', 'WIKISOURCE_SECTION'],
@@ -194,9 +193,8 @@ export const bookmarks = sqliteTable('bookmarks', {
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  editionId: text('edition_id')
-    .notNull()
-    .references(() => bookEditions.id, { onDelete: 'cascade' }),
+  bookId: text('book_id').notNull(),
+  editionId: text('edition_id'),
   locationType: text('location_type').notNull(),
   locationValue: text('location_value').notNull(),
   label: text('label'),

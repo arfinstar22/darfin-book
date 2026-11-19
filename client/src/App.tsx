@@ -7,16 +7,26 @@ import {
   Loader2,
   Search,
 } from 'lucide-react';
-import { searchBooks, getCuratedShelves } from './api.js';
+import {
+  searchBooks,
+  getCuratedShelves,
+  fetchUserLibraryApi,
+  saveBookToShelfApi,
+  removeBookFromShelfApi,
+  toggleFavoriteBookApi,
+  saveBookmarkApi,
+  deleteBookmarkApi,
+} from './api.js';
 import { AccountView } from './components/AccountView.js';
 import { BookCard } from './components/BookCard.js';
 import { BookDetailModal } from './components/BookDetailModal.js';
 import { BottomNav, type NavTab } from './components/BottomNav.js';
 import { ExploreView } from './components/ExploreView.js';
+import { LoginModal } from './components/LoginModal.js';
 import { Navbar } from './components/Navbar.js';
 import { ReaderModal } from './components/ReaderModal.js';
 import { ShelfView } from './components/ShelfView.js';
-import type { Book, CuratedShelf } from './types.js';
+import type { Book, CuratedShelf, UserProfile, BookmarkItem } from './types.js';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
@@ -65,6 +75,52 @@ export const App: React.FC = () => {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [activeReadingBook, setActiveReadingBook] = useState<Book | null>(null);
 
+  // User Authentication State
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    try {
+      const stored = localStorage.getItem('darfin_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [token, setToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('darfin_token');
+    } catch {
+      return null;
+    }
+  });
+
+  // Favorite Books IDs (Set of provider:providerId)
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('darfin_favorites');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Reading Bookmarks
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('darfin_bookmarks');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Login Gate Modal
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginReason, setLoginReason] = useState<'save' | 'favorite' | 'bookmark' | 'general'>('general');
+  const [pendingBookAction, setPendingBookAction] = useState<{
+    type: 'save' | 'favorite';
+    book: Book;
+  } | null>(null);
+
   // Saved Books (Local Storage)
   const [savedBooks, setSavedBooks] = useState<Book[]>(() => {
     try {
@@ -75,14 +131,43 @@ export const App: React.FC = () => {
     }
   });
 
-  // Sync savedBooks to localStorage
+  // Sync local data
   useEffect(() => {
     try {
       localStorage.setItem('darfin_saved_books', JSON.stringify(savedBooks));
+      localStorage.setItem('darfin_favorites', JSON.stringify(favoriteIds));
+      localStorage.setItem('darfin_bookmarks', JSON.stringify(bookmarks));
     } catch (e) {
       console.error(e);
     }
-  }, [savedBooks]);
+  }, [savedBooks, favoriteIds, bookmarks]);
+
+  // Sync library with server when logged in
+  useEffect(() => {
+    if (!token) return;
+    async function syncLibrary() {
+      try {
+        const lib = await fetchUserLibraryApi(token!);
+        if (lib.books && lib.books.length > 0) {
+          setSavedBooks((prev) => {
+            const map = new Map<string, Book>();
+            for (const b of lib.books) map.set(`${b.provider}:${b.providerId}`, b);
+            for (const b of prev) map.set(`${b.provider}:${b.providerId}`, b);
+            return Array.from(map.values());
+          });
+        }
+        if (lib.favoriteIds) {
+          setFavoriteIds(lib.favoriteIds);
+        }
+        if (lib.bookmarks) {
+          setBookmarks(lib.bookmarks);
+        }
+      } catch (err) {
+        console.error('Gagal sinkronisasi perpustakaan:', err);
+      }
+    }
+    syncLibrary();
+  }, [token]);
 
   // Load curated shelves on initial load
   useEffect(() => {
@@ -136,11 +221,19 @@ export const App: React.FC = () => {
     }
   };
 
-  // Saved books management
-  const handleToggleSave = (book: Book) => {
+  // Saved books management (Gated by Google Login)
+  const handleToggleSave = async (book: Book) => {
+    if (!user) {
+      setLoginReason('save');
+      setPendingBookAction({ type: 'save', book });
+      setIsLoginModalOpen(true);
+      return;
+    }
+
     const exists = savedBooks.some(
       (b) => b.provider === book.provider && b.providerId === book.providerId
     );
+
     if (exists) {
       setSavedBooks((prev) =>
         prev.filter(
@@ -148,8 +241,123 @@ export const App: React.FC = () => {
             !(b.provider === book.provider && b.providerId === book.providerId)
         )
       );
+      if (token) {
+        removeBookFromShelfApi(book.provider, book.providerId, token).catch(console.error);
+      }
     } else {
       setSavedBooks((prev) => [book, ...prev]);
+      if (token) {
+        saveBookToShelfApi(book, token).catch(console.error);
+      }
+    }
+  };
+
+  // Toggle Favorite (Gated by Google Login)
+  const handleToggleFavorite = async (book: Book) => {
+    if (!user) {
+      setLoginReason('favorite');
+      setPendingBookAction({ type: 'favorite', book });
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    const bookKey = `${book.provider}:${book.providerId}`;
+    const wasFavorite = favoriteIds.includes(bookKey);
+
+    if (wasFavorite) {
+      setFavoriteIds((prev) => prev.filter((id) => id !== bookKey));
+    } else {
+      setFavoriteIds((prev) => [...prev, bookKey]);
+      if (!savedBooks.some((b) => b.provider === book.provider && b.providerId === book.providerId)) {
+        setSavedBooks((prev) => [book, ...prev]);
+      }
+    }
+
+    if (token) {
+      toggleFavoriteBookApi(book, token).catch(console.error);
+    }
+  };
+
+  // Save Bookmark / Reading Marker (Gated by Google Login)
+  const handleSaveBookmark = async (bookmarkData: {
+    bookId: string;
+    locationType: string;
+    locationValue: string;
+    label?: string;
+  }) => {
+    if (!user) {
+      setLoginReason('bookmark');
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    const tempId = `bm_${Date.now()}`;
+    const newBookmark: BookmarkItem = {
+      id: tempId,
+      bookId: bookmarkData.bookId,
+      locationType: bookmarkData.locationType,
+      locationValue: bookmarkData.locationValue,
+      label: bookmarkData.label || 'Pembatas Halaman',
+      createdAt: new Date().toISOString(),
+    };
+
+    setBookmarks((prev) => [newBookmark, ...prev]);
+
+    if (token) {
+      try {
+        const res = await saveBookmarkApi(bookmarkData, token);
+        setBookmarks((prev) =>
+          prev.map((b) => (b.id === tempId ? { ...b, id: res.id } : b))
+        );
+      } catch (err) {
+        console.error('Gagal simpan bookmark ke server:', err);
+      }
+    }
+  };
+
+  const handleDeleteBookmark = async (bookmarkId: string) => {
+    setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+    if (token) {
+      deleteBookmarkApi(bookmarkId, token).catch(console.error);
+    }
+  };
+
+  const handleLoginSuccess = async (newUser: UserProfile, newToken: string) => {
+    setUser(newUser);
+    setToken(newToken);
+    try {
+      localStorage.setItem('darfin_user', JSON.stringify(newUser));
+      localStorage.setItem('darfin_token', newToken);
+    } catch (e) {
+      console.error(e);
+    }
+
+    // Process pending action
+    if (pendingBookAction) {
+      const { type, book } = pendingBookAction;
+      if (type === 'save') {
+        setSavedBooks((prev) => [book, ...prev.filter(b => !(b.provider === book.provider && b.providerId === book.providerId))]);
+        saveBookToShelfApi(book, newToken).catch(console.error);
+      } else if (type === 'favorite') {
+        const key = `${book.provider}:${book.providerId}`;
+        setFavoriteIds((prev) => [...prev.filter(id => id !== key), key]);
+        setSavedBooks((prev) => [book, ...prev.filter(b => !(b.provider === book.provider && b.providerId === book.providerId))]);
+        toggleFavoriteBookApi(book, newToken).catch(console.error);
+      }
+      setPendingBookAction(null);
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm('Keluar dari Akun Google?')) {
+      setUser(null);
+      setToken(null);
+      try {
+        localStorage.removeItem('darfin_user');
+        localStorage.removeItem('darfin_token');
+      } catch (e) {
+        console.error(e);
+      }
     }
   };
 
@@ -163,6 +371,10 @@ export const App: React.FC = () => {
     if (confirm('Hapus seluruh data lokal dan riwayat di peramban ini?')) {
       localStorage.clear();
       setSavedBooks([]);
+      setFavoriteIds([]);
+      setBookmarks([]);
+      setUser(null);
+      setToken(null);
       setSearchResults(null);
       setSearchQuery('');
       alert('Data lokal berhasil dibersihkan.');
@@ -185,6 +397,15 @@ export const App: React.FC = () => {
         onToggleFreeOnly={handleToggleFreeOnly}
         isDarkMode={isDarkMode}
         onToggleDarkMode={handleToggleDarkMode}
+        user={user}
+        onOpenLogin={() => {
+          setLoginReason('general');
+          setIsLoginModalOpen(true);
+        }}
+        onNavigateAccount={() => {
+          setCurrentTab('account');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Main Content Area */}
@@ -244,6 +465,8 @@ export const App: React.FC = () => {
                         book={book}
                         onSelect={setSelectedBook}
                         onReadDirect={setActiveReadingBook}
+                        isFavorite={favoriteIds.includes(`${book.provider}:${book.providerId}`)}
+                        onToggleFavorite={handleToggleFavorite}
                       />
                     ))}
                   </div>
@@ -267,7 +490,7 @@ export const App: React.FC = () => {
                     </h1>
 
                     <p className="mt-3 text-xs leading-relaxed text-slate-300 sm:text-sm">
-                      Ribuan buku berbahasa Indonesia dapat diakses langsung. Mulai dari buku teks pelajaran sekolah resmi Kurikulum Merdeka hingga naskah sastra klasik nusantara.
+                      Ribuan buku berbahasa Indonesia dapat diakses langsung tanpa login. Mulai dari buku teks pelajaran sekolah resmi Kurikulum Merdeka hingga naskah sastra klasik nusantara.
                     </p>
 
                     <div className="mt-6 flex flex-wrap gap-2.5">
@@ -331,6 +554,8 @@ export const App: React.FC = () => {
                             book={book}
                             onSelect={setSelectedBook}
                             onReadDirect={setActiveReadingBook}
+                            isFavorite={favoriteIds.includes(`${book.provider}:${book.providerId}`)}
+                            onToggleFavorite={handleToggleFavorite}
                           />
                         ))}
                       </div>
@@ -356,10 +581,19 @@ export const App: React.FC = () => {
         {currentTab === 'shelf' && (
           <ShelfView
             savedBooks={savedBooks}
+            favoriteIds={favoriteIds}
+            bookmarks={bookmarks}
             onSelectBook={setSelectedBook}
             onReadDirect={setActiveReadingBook}
             onRemoveFromShelf={handleToggleSave}
+            onToggleFavorite={handleToggleFavorite}
             onClearShelf={handleClearShelf}
+            user={user}
+            onOpenLogin={() => {
+              setLoginReason('save');
+              setIsLoginModalOpen(true);
+            }}
+            onDeleteBookmark={handleDeleteBookmark}
           />
         )}
 
@@ -369,6 +603,15 @@ export const App: React.FC = () => {
             onClearAllData={handleClearAllData}
             isDarkMode={isDarkMode}
             onToggleDarkMode={handleToggleDarkMode}
+            user={user}
+            onOpenLogin={() => {
+              setLoginReason('general');
+              setIsLoginModalOpen(true);
+            }}
+            onLogout={handleLogout}
+            savedCount={savedBooks.length}
+            favoriteCount={favoriteIds.length}
+            bookmarkCount={bookmarks.length}
           />
         )}
       </main>
@@ -381,6 +624,8 @@ export const App: React.FC = () => {
           onRead={setActiveReadingBook}
           isSaved={isBookSaved(selectedBook)}
           onToggleSave={handleToggleSave}
+          isFavorite={favoriteIds.includes(`${selectedBook.provider}:${selectedBook.providerId}`)}
+          onToggleFavorite={handleToggleFavorite}
         />
       )}
 
@@ -389,8 +634,26 @@ export const App: React.FC = () => {
         <ReaderModal
           book={activeReadingBook}
           onClose={() => setActiveReadingBook(null)}
+          isLoggedIn={Boolean(user)}
+          onRequestLogin={(reason) => {
+            setLoginReason(reason);
+            setIsLoginModalOpen(true);
+          }}
+          onSaveBookmark={handleSaveBookmark}
+          bookmarks={bookmarks}
         />
       )}
+
+      {/* Google Login Gate Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => {
+          setIsLoginModalOpen(false);
+          setPendingBookAction(null);
+        }}
+        reason={loginReason}
+        onLoginSuccess={handleLoginSuccess}
+      />
 
       {/* Bottom Navigation for Mobile */}
       <BottomNav

@@ -73,3 +73,29 @@ export interface ReaderResolution {
   canBookmark: boolean;
   canDownload: boolean;
 }
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string | null;
+}
+
+export interface BookmarkItem {
+  id: string;
+  bookId: string;
+  locationType: string;
+  locationValue: string;
+  label?: string | null;
+  createdAt?: string | null;
+}
+
+export interface ReadingProgressItem {
+  id: string;
+  bookId: string;
+  readerMode: string;
+  locationType: string;
+  locationValue: string;
+  progressPercent?: number | null;
+  lastReadAt?: string | null;
+}

@@ -9,6 +9,7 @@ import {
   Calendar,
   Layers,
   Share2,
+  Heart,
 } from 'lucide-react';
 import type { Book } from '../types.js';
 import { getAccessBadge } from './BookCard.js';
@@ -20,6 +21,8 @@ interface BookDetailModalProps {
   onRead: (book: Book) => void;
   isSaved: boolean;
   onToggleSave: (book: Book) => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (book: Book) => void;
 }
 
 export const BookDetailModal: React.FC<BookDetailModalProps> = ({
@@ -28,6 +31,8 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
   onRead,
   isSaved,
   onToggleSave,
+  isFavorite = false,
+  onToggleFavorite,
 }) => {
   if (!book) return null;
 
@@ -153,17 +158,34 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
 
         {/* Footer Actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E8E5DF] dark:border-slate-800 bg-[#FAF8F5] dark:bg-[#080E1E] px-6 py-4">
-          <button
-            onClick={() => onToggleSave(book)}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition ${
-              isSaved
-                ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800'
-                : 'border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
-            <span>{isSaved ? 'Tersimpan di Rak' : 'Simpan ke Rak'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onToggleSave(book)}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition ${
+                isSaved
+                  ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800'
+                  : 'border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
+              <span>{isSaved ? 'Tersimpan di Rak' : 'Simpan ke Rak'}</span>
+            </button>
+
+            {onToggleFavorite && (
+              <button
+                onClick={() => onToggleFavorite(book)}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition ${
+                  isFavorite
+                    ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                    : 'border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700'
+                }`}
+                title={isFavorite ? 'Hapus dari Favorit' : 'Tambah ke Favorit'}
+              >
+                <Heart className={`h-4 w-4 ${isFavorite ? 'fill-current text-rose-500' : ''}`} />
+                <span>{isFavorite ? 'Favorit' : 'Suka'}</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {book.sourceUrl && (

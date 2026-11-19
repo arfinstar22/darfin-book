@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Clock, Eye, Info } from 'lucide-react';
+import { CheckCircle2, Clock, Eye, Info, Heart } from 'lucide-react';
 import type { AccessStatus, Book } from '../types.js';
 import { BookCoverVisual } from './BookCoverVisual.js';
 
@@ -7,6 +7,8 @@ interface BookCardProps {
   book: Book;
   onSelect: (book: Book) => void;
   onReadDirect?: (book: Book) => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (book: Book) => void;
 }
 
 export const getAccessBadge = (status: AccessStatus) => {
@@ -42,6 +44,8 @@ export const BookCard: React.FC<BookCardProps> = ({
   book,
   onSelect,
   onReadDirect,
+  isFavorite = false,
+  onToggleFavorite,
 }) => {
   const badge = getAccessBadge(book.access.status);
   const BadgeIcon = badge.icon;
@@ -70,6 +74,25 @@ export const BookCard: React.FC<BookCardProps> = ({
               <span>{badge.label}</span>
             </span>
           </div>
+
+          {/* Favorite Button */}
+          {onToggleFavorite && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(book);
+              }}
+              className={`absolute top-2 right-2 z-20 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-md shadow-xs transition ${
+                isFavorite
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-black/30 text-white/80 hover:bg-black/50 hover:text-white'
+              }`}
+              title={isFavorite ? 'Hapus dari Favorit' : 'Tambah ke Favorit'}
+            >
+              <Heart className={`h-3.5 w-3.5 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
+          )}
         </div>
 
         {/* Title & Author */}

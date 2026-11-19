@@ -20,12 +20,7 @@ const envSchema = z.object({
   DATABASE_PATH: z.string().default('./data/darfin_book.db'),
   DATABASE_URL: z.string().optional(),
 
-  TELEGRAM_BOT_TOKEN: z.string().optional(),
-  TELEGRAM_BOT_USERNAME: z.string().optional(),
-  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
-  TELEGRAM_MINI_APP_URL: z.string().optional(),
-  TELEGRAM_INITDATA_MAX_AGE_SECONDS: z.coerce.number().default(86400),
-
+  GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_BOOKS_API_KEY: z.string().optional(),
   OPEN_LIBRARY_USER_AGENT: z
     .string()

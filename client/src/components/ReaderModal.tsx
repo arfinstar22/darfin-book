@@ -11,6 +11,8 @@ import {
   List,
   ChevronDown,
   BookOpen,
+  Bookmark,
+  Check,
 } from 'lucide-react';
 import { resolveReader, getWikisourceContent } from '../api.js';
 import type { Book, ReaderResolution } from '../types.js';
@@ -18,21 +20,55 @@ import type { Book, ReaderResolution } from '../types.js';
 interface ReaderModalProps {
   book: Book;
   onClose: () => void;
+  isLoggedIn?: boolean;
+  onRequestLogin?: (reason: 'bookmark') => void;
+  onSaveBookmark?: (bookmark: {
+    bookId: string;
+    locationType: string;
+    locationValue: string;
+    label?: string;
+  }) => void;
+  bookmarks?: Array<{ id: string; locationValue: string; label?: string | null }>;
 }
 
 type ReaderTheme = 'paper' | 'sepia' | 'dark';
 
-export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
+export const ReaderModal: React.FC<ReaderModalProps> = ({
+  book,
+  onClose,
+  isLoggedIn = false,
+  onRequestLogin,
+  onSaveBookmark,
+  bookmarks = [],
+}) => {
   const [resolution, setResolution] = useState<ReaderResolution | null>(null);
   const [chapters, setChapters] = useState<Array<{ id: string; title: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bookmarkSavedToast, setBookmarkSavedToast] = useState(false);
 
   // Reader Settings
   const [theme, setTheme] = useState<ReaderTheme>('paper');
   const [fontSize, setFontSize] = useState(18); // Default 18px
   const [isSerif, setIsSerif] = useState(true);
   const [showToc, setShowToc] = useState(false);
+
+  const handleBookmarkClick = () => {
+    if (!isLoggedIn) {
+      if (onRequestLogin) onRequestLogin('bookmark');
+      return;
+    }
+    if (onSaveBookmark) {
+      onSaveBookmark({
+        bookId: `${book.provider}:${book.providerId}`,
+        locationType: resolution?.mode === 'WIKISOURCE_TEXT' ? 'WIKISOURCE_SECTION' : 'PDF_PAGE',
+        locationValue: chapters.length > 0 ? chapters[0].title : 'Halaman Pembatas',
+        label: `${book.title} - ${chapters.length > 0 ? chapters[0].title : 'Halaman Ditandai'}`,
+      });
+      setBookmarkSavedToast(true);
+      setTimeout(() => setBookmarkSavedToast(false), 3000);
+    }
+  };
 
   // Load resolution on mount
   useEffect(() => {
@@ -141,6 +177,26 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({ book, onClose }) => {
               )}
             </div>
           )}
+
+          {/* Bookmark / Tandai Halaman */}
+          <button
+            onClick={handleBookmarkClick}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+              bookmarkSavedToast
+                ? 'border-emerald-500 bg-emerald-500 text-white'
+                : 'border-black/15 bg-black/5 hover:bg-black/10'
+            }`}
+            title="Tandai Halaman Ini (Perlu Login Akun Google)"
+          >
+            {bookmarkSavedToast ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Bookmark className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">
+              {bookmarkSavedToast ? 'Tersimpan!' : 'Tandai Halaman'}
+            </span>
+          </button>
 
           {/* Font Family Toggle */}
           <button

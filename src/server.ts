@@ -10,8 +10,7 @@ import { WikisourceProvider } from './providers/wikisource.js';
 import { ReaderResolverService } from './services/readerResolver.js';
 import { SearchService } from './services/search.js';
 import { validateIsbn } from './utils/isbn.js';
-import { createTelegramBot } from './bot/bot.js';
-import { validateTelegramInitData } from './bot/telegramAuth.js';
+import { UserService } from './services/userService.js';
 
 export async function buildServer() {
   const server = Fastify({
@@ -41,6 +40,7 @@ export async function buildServer() {
   const searchService = new SearchService();
   const readerResolver = new ReaderResolverService();
   const wikisource = new WikisourceProvider();
+  const userService = new UserService();
 
   // Basic Health check
   server.get('/health', async () => {
@@ -187,47 +187,181 @@ export async function buildServer() {
     return content;
   });
 
-  // Telegram Mini App initData validation
-  server.post('/api/v1/telegram/validate-init-data', async (request, reply) => {
-    const body = request.body as { initData?: string };
-    if (!body?.initData) {
+  // Google / Gmail Authentication
+  server.post('/api/v1/auth/google', async (request, reply) => {
+    const body = request.body as {
+      credential?: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+      googleId?: string;
+    };
+
+    let email = body?.email;
+    let name = body?.name;
+    let picture = body?.picture;
+    let googleId = body?.googleId;
+
+    // Decode Google ID token if provided
+    if (body?.credential) {
+      try {
+        const parts = body.credential.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+          if (payload.email) {
+            email = payload.email;
+            name = payload.name || name;
+            picture = payload.picture || picture;
+            googleId = payload.sub || googleId;
+          }
+        }
+      } catch (e) {
+        server.log.warn({ error: e }, 'Failed to parse Google credential token');
+      }
+    }
+
+    if (!email) {
       return reply.code(400).send({
-        valid: false,
-        error: 'initData wajib dilampirkan',
+        error: 'Email Google wajib disertakan untuk masuk',
       });
     }
 
-    const result = validateTelegramInitData(body.initData);
-    if (!result.valid) {
-      return reply.code(401).send(result);
+    try {
+      const authResult = await userService.loginWithGoogle({
+        email,
+        name,
+        picture,
+        googleId,
+      });
+      return reply.code(200).send(authResult);
+    } catch (err: unknown) {
+      return reply.code(400).send({
+        error: (err as Error).message || 'Gagal masuk dengan akun Google',
+      });
     }
-
-    return result;
   });
 
-  // Telegram Bot Webhook
-  const telegramBot = createTelegramBot();
-  if (telegramBot) {
-    server.post('/api/v1/telegram/webhook', async (request, reply) => {
-      // Validate secret token if configured
-      if (env.TELEGRAM_WEBHOOK_SECRET) {
-        const headerSecret = request.headers['x-telegram-bot-api-secret-token'];
-        if (headerSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
-          return reply.code(403).send({ error: 'Secret token tidak cocok' });
-        }
-      }
+  // Helper auth extractor
+  const requireAuth = (request: any, reply: any) => {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      reply.code(401).send({ error: 'Sesi masuk diperlukan. Silakan login dengan Google.' });
+      return null;
+    }
+    const token = authHeader.slice(7);
+    const session = userService.verifySessionToken(token);
+    if (!session) {
+      reply.code(401).send({ error: 'Sesi masuk tidak valid atau kedaluwarsa.' });
+      return null;
+    }
+    return session;
+  };
 
-      try {
-        await telegramBot.handleUpdate(request.body as any);
-        return reply.code(200).send({ ok: true });
-      } catch (err: unknown) {
-        server.log.error(err, 'Telegram update processing error');
-        return reply.code(200).send({ ok: false, error: (err as Error).message });
-      }
-    });
+  // Get current user profile
+  server.get('/api/v1/auth/me', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
 
-    server.log.info('Telegram Bot initialized and webhook route registered at /api/v1/telegram/webhook');
-  }
+    return { user: session };
+  });
+
+  // User Library (Saved Books, Favorites, Bookmarks, Reading Progress)
+  server.get('/api/v1/user/library', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const library = await userService.getUserLibrary(session.userId);
+    return library;
+  });
+
+  // Save book to shelf
+  server.post('/api/v1/user/books', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const body = request.body as { book?: ProviderBook; isFavorite?: boolean };
+    if (!body?.book) {
+      return reply.code(400).send({ error: 'Data buku wajib dilampirkan' });
+    }
+
+    await userService.saveBook(session.userId, body.book, body.isFavorite ?? false);
+    return { ok: true, message: 'Buku berhasil disimpan ke rak' };
+  });
+
+  // Remove book from shelf
+  server.delete('/api/v1/user/books/:provider/:providerId', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const { provider, providerId } = request.params as { provider: string; providerId: string };
+    await userService.removeBook(session.userId, provider, providerId);
+    return { ok: true, message: 'Buku dihapus dari rak' };
+  });
+
+  // Toggle Favorite
+  server.post('/api/v1/user/favorites/toggle', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const body = request.body as { book?: ProviderBook };
+    if (!body?.book) {
+      return reply.code(400).send({ error: 'Data buku wajib dilampirkan' });
+    }
+
+    const isFavorite = await userService.toggleFavorite(session.userId, body.book);
+    return { ok: true, isFavorite };
+  });
+
+  // Save Bookmark / Reading Marker
+  server.post('/api/v1/user/bookmarks', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const body = request.body as {
+      bookId: string;
+      locationType: string;
+      locationValue: string;
+      label?: string;
+    };
+
+    if (!body?.bookId || !body?.locationValue) {
+      return reply.code(400).send({ error: 'Lokasi bacaan wajib diisi' });
+    }
+
+    const res = await userService.saveBookmark(session.userId, body);
+    return { ok: true, bookmarkId: res.id };
+  });
+
+  // Delete Bookmark
+  server.delete('/api/v1/user/bookmarks/:id', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+    await userService.deleteBookmark(session.userId, id);
+    return { ok: true };
+  });
+
+  // Save Reading Progress
+  server.post('/api/v1/user/progress', async (request, reply) => {
+    const session = requireAuth(request, reply);
+    if (!session) return;
+
+    const body = request.body as {
+      bookId: string;
+      readerMode: string;
+      locationType: string;
+      locationValue: string;
+      progressPercent?: number;
+    };
+
+    if (!body?.bookId || !body?.locationValue) {
+      return reply.code(400).send({ error: 'Lokasi progres membaca wajib diisi' });
+    }
+
+    await userService.saveReadingProgress(session.userId, body);
+    return { ok: true };
+  });
 
   // Serve static frontend in production if built
   const clientDist = path.resolve(process.cwd(), 'dist/client');
