@@ -209,18 +209,69 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsLoading(true);
     setError(null);
 
+    // 1. Try Google Identity Services OAuth2 Token Popup (Client-side, NO client_secret required!)
+    const googleObj = (window as any).google;
+    if (googleClientId && googleObj?.accounts?.oauth2) {
+      try {
+        const tokenClient = googleObj.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'openid email profile',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse.error) {
+              setIsLoading(false);
+              setError('Login Google dibatalkan atau terjadi kesalahan.');
+              return;
+            }
+            if (tokenResponse.access_token) {
+              setIsLoading(true);
+              setError(null);
+              try {
+                // Fetch verified profile from Google's userinfo API
+                const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const profile = await userInfoRes.json();
+                if (profile.email) {
+                  const authRes = await loginWithGoogleApi({
+                    email: profile.email,
+                    name: profile.name,
+                    picture: profile.picture,
+                    googleId: profile.sub,
+                  });
+                  saveAccountToDevice(authRes.user);
+                  onLoginSuccess(authRes.user, authRes.token);
+                  onClose();
+                } else {
+                  setError('Gagal membaca data profil dari akun Google Anda.');
+                }
+              } catch (err: any) {
+                setError(err.message || 'Gagal masuk dengan Google');
+              } finally {
+                setIsLoading(false);
+              }
+            }
+          },
+        });
+
+        setIsLoading(false);
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch (e) {
+        console.warn('initTokenClient error, falling back to server redirect:', e);
+      }
+    }
+
+    // 2. Fallback to server redirect flow
     try {
       const res = await getGoogleAuthUrlApi();
       if (res.configured && res.url) {
-        // Redirect browser to Google's official account chooser (prompt=select_account)
         window.location.href = res.url;
         return;
       }
 
-      // If Google Client ID is not configured on server yet, show direct Gmail form
       setShowDirectEmail(true);
       setError(
-        'Server belum mengonfigurasi GOOGLE_CLIENT_ID. Silakan gunakan form Gmail di bawah ini, atau pasang Client ID di pengaturan Render.'
+        'Server belum mengonfigurasi GOOGLE_CLIENT_ID. Silakan gunakan form Gmail di bawah ini.'
       );
     } catch (err: unknown) {
       setError((err as Error).message || 'Gagal memulai autentikasi Google');

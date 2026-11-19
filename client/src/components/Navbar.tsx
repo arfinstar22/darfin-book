@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Sparkles, Sun, Moon, LogIn, User } from 'lucide-react';
+import { Search, Sparkles, Sun, Moon, LogIn, User, LogOut } from 'lucide-react';
 import type { UserProfile } from '../types.js';
 
 interface NavbarProps {
@@ -13,6 +13,7 @@ interface NavbarProps {
   user?: UserProfile | null;
   onOpenLogin?: () => void;
   onNavigateAccount?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   onOpenLogin,
   onNavigateAccount,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-30 border-b border-[#E8E5DF] dark:border-slate-800 bg-[#FDFBF7]/90 dark:bg-[#080E1E]/90 backdrop-blur-md transition-colors duration-200">
@@ -95,25 +97,39 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* User Profile or Google Sign In */}
           {user ? (
-            <button
-              type="button"
-              onClick={onNavigateAccount}
-              className="flex items-center gap-2 rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50/70 dark:bg-teal-950/40 py-1 pl-1 pr-3 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100 transition"
-              title={`Akun: ${user.displayName} (${user.email})`}
-            >
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.displayName}
-                  className="h-7 w-7 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-600 text-[11px] font-bold text-white">
-                  {user.displayName.charAt(0).toUpperCase()}
-                </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onNavigateAccount}
+                className="flex items-center gap-2 rounded-full border border-teal-200 dark:border-teal-900/60 bg-teal-50/70 dark:bg-teal-950/40 py-1 pl-1 pr-3 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition"
+                title={`Akun: ${user.displayName} (${user.email})`}
+              >
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.displayName}
+                    className="h-7 w-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-600 text-[11px] font-bold text-white">
+                    {user.displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="hidden sm:inline max-w-[120px] truncate">{user.displayName}</span>
+              </button>
+
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="flex items-center gap-1.5 rounded-full border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition shadow-2xs"
+                  title="Keluar dari akun Google"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Keluar</span>
+                </button>
               )}
-              <span className="hidden sm:inline max-w-[100px] truncate">{user.displayName}</span>
-            </button>
+            </div>
           ) : (
             <button
               type="button"

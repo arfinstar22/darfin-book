@@ -458,6 +458,7 @@ export const App: React.FC = () => {
           setCurrentTab('account');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
