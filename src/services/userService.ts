@@ -46,6 +46,7 @@ export class UserService {
         sub: user.id,
         email: user.email,
         name: user.displayName,
+        picture: user.avatarUrl || null,
         iat: now,
         exp: now + 30 * 24 * 60 * 60, // 30 days
       })
@@ -62,7 +63,12 @@ export class UserService {
   /**
    * Verifies session token and extracts user ID.
    */
-  verifySessionToken(token: string): { userId: string; email: string } | null {
+  verifySessionToken(token: string): {
+    userId: string;
+    email: string;
+    displayName?: string;
+    avatarUrl?: string | null;
+  } | null {
     if (!token) return null;
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -83,7 +89,12 @@ export class UserService {
       if (data.exp && data.exp < now) {
         return null;
       }
-      return { userId: data.sub, email: data.email };
+      return {
+        userId: data.sub,
+        email: data.email,
+        displayName: data.name || data.email?.split('@')[0] || 'Pengguna',
+        avatarUrl: data.picture || null,
+      };
     } catch {
       return null;
     }

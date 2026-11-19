@@ -261,10 +261,25 @@ export async function buildServer() {
   // Public auth configuration (e.g. Google Client ID for GIS SDK)
   server.get('/api/v1/auth/config', async () => {
     return {
-      googleClientId: env.GOOGLE_CLIENT_ID || '',
+      googleClientId: (env.GOOGLE_CLIENT_ID || '').trim(),
       hasGoogleOAuth: Boolean(env.GOOGLE_CLIENT_ID),
+      hasClientSecret: Boolean(env.GOOGLE_CLIENT_SECRET),
     };
   });
+
+  // Helper for deterministic OAuth redirect URI
+  const getGoogleRedirectUri = (request: any): string => {
+    const forwardedHost = request.headers['x-forwarded-host'] as string;
+    const hostHeader = request.headers.host as string;
+    const rawHost = forwardedHost || hostHeader || 'darfin-book.onrender.com';
+    const host = rawHost.split(',')[0].trim();
+
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      return `http://${host}/api/v1/auth/google/callback`;
+    }
+    // Production (Render or any public domain) MUST always be https
+    return `https://${host}/api/v1/auth/google/callback`;
+  };
 
   // Official Google OAuth 2.0 URL generator
   server.get('/api/v1/auth/google/url', async (request, reply) => {
@@ -275,12 +290,10 @@ export async function buildServer() {
       };
     }
 
-    const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'darfin-book.onrender.com';
-    const proto = (request.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
-    const redirectUri = `${proto}://${host}/api/v1/auth/google/callback`;
+    const redirectUri = getGoogleRedirectUri(request);
 
     const params = new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
+      client_id: env.GOOGLE_CLIENT_ID.trim(),
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: 'openid email profile',
@@ -296,54 +309,102 @@ export async function buildServer() {
 
   // Official Google OAuth 2.0 Redirect Callback
   server.get('/api/v1/auth/google/callback', async (request, reply) => {
-    const { code } = request.query as { code?: string };
+    const { code, error } = request.query as { code?: string; error?: string };
+    if (error) {
+      server.log.warn({ error }, 'Google OAuth redirected with error');
+      return reply.redirect(`/?error=${encodeURIComponent(error)}`);
+    }
+
     if (!code || !env.GOOGLE_CLIENT_ID) {
       return reply.redirect('/?error=google_auth_failed');
     }
 
-    const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'darfin-book.onrender.com';
-    const proto = (request.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
-    const redirectUri = `${proto}://${host}/api/v1/auth/google/callback`;
+    const redirectUri = getGoogleRedirectUri(request);
 
     try {
+      const clientId = env.GOOGLE_CLIENT_ID.trim();
+      const clientSecret = (env.GOOGLE_CLIENT_SECRET || '').trim();
+
+      const params = new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      });
+
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          code,
-          client_id: env.GOOGLE_CLIENT_ID,
-          client_secret: env.GOOGLE_CLIENT_SECRET || '',
-          redirect_uri: redirectUri,
-          grant_type: 'authorization_code',
-        }),
+        body: params.toString(),
       });
 
-      const tokenData = (await tokenRes.json()) as { access_token?: string; id_token?: string };
+      const tokenData = (await tokenRes.json()) as {
+        access_token?: string;
+        id_token?: string;
+        error?: string;
+        error_description?: string;
+      };
+
       if (!tokenData.access_token && !tokenData.id_token) {
-        return reply.redirect('/?error=token_exchange_failed');
+        server.log.error({ tokenData, redirectUri, hasSecret: Boolean(clientSecret) }, 'Google OAuth token exchange failed');
+        const reason = tokenData.error_description || tokenData.error || 'token_exchange_failed';
+        return reply.redirect(`/?error=token_exchange_failed&reason=${encodeURIComponent(reason)}`);
       }
 
-      // Fetch user profile from Google
-      const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const profile = (await profileRes.json()) as { email?: string; name?: string; picture?: string; sub?: string };
+      let email: string | undefined;
+      let name: string | undefined;
+      let picture: string | undefined;
+      let googleId: string | undefined;
 
-      if (!profile.email) {
+      // 1. First attempt to decode verified id_token
+      if (tokenData.id_token) {
+        try {
+          const parts = tokenData.id_token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+            email = payload.email;
+            name = payload.name;
+            picture = payload.picture;
+            googleId = payload.sub;
+          }
+        } catch (e) {
+          server.log.warn({ e }, 'Failed to parse id_token from Google');
+        }
+      }
+
+      // 2. Fallback to userinfo API if id_token did not yield email
+      if (!email && tokenData.access_token) {
+        const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` },
+        });
+        const profile = (await profileRes.json()) as {
+          email?: string;
+          name?: string;
+          picture?: string;
+          sub?: string;
+        };
+        email = profile.email;
+        name = profile.name || name;
+        picture = profile.picture || picture;
+        googleId = profile.sub || googleId;
+      }
+
+      if (!email) {
         return reply.redirect('/?error=email_not_found');
       }
 
       const authResult = await userService.loginWithGoogle({
-        email: profile.email,
-        name: profile.name,
-        picture: profile.picture,
-        googleId: profile.sub,
+        email,
+        name,
+        picture,
+        googleId,
       });
 
       return reply.redirect(`/?auth_token=${encodeURIComponent(authResult.token)}`);
-    } catch (err) {
-      server.log.error({ err }, 'Google OAuth callback exchange failed');
-      return reply.redirect('/?error=google_auth_error');
+    } catch (err: any) {
+      server.log.error({ err }, 'Google OAuth callback exchange exception');
+      return reply.redirect(`/?error=google_auth_error&details=${encodeURIComponent(err?.message || '')}`);
     }
   });
 
@@ -422,7 +483,14 @@ export async function buildServer() {
     const session = requireAuth(request, reply);
     if (!session) return;
 
-    return { user: session };
+    return {
+      user: {
+        id: session.userId,
+        email: session.email,
+        displayName: session.displayName || session.email.split('@')[0],
+        avatarUrl: session.avatarUrl,
+      },
+    };
   });
 
   // User Library (Saved Books, Favorites, Bookmarks, Reading Progress)

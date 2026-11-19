@@ -151,30 +151,33 @@ export const App: React.FC = () => {
         setToken(authToken);
         localStorage.setItem('darfin_token', authToken);
 
-        // Fetch user info with the session token
-        fetch('/api/v1/user/library', {
+        // Parse user profile immediately from signed token payload
+        try {
+          const parts = authToken.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            const u: UserProfile = {
+              id: payload.sub,
+              email: payload.email,
+              displayName: payload.name || payload.email?.split('@')[0] || 'Pengguna',
+              avatarUrl: payload.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(payload.name || payload.email)}`,
+            };
+            setUser(u);
+            localStorage.setItem('darfin_user', JSON.stringify(u));
+          }
+        } catch (e) {
+          console.warn('Failed to parse token payload:', e);
+        }
+
+        // Confirm with server /api/v1/auth/me
+        fetch('/api/v1/auth/me', {
           headers: { Authorization: `Bearer ${authToken}` },
         })
           .then((r) => (r.ok ? r.json() : null))
-          .then((lib) => {
-            if (lib) {
-              // Parse user profile from token payload
-              try {
-                const parts = authToken.split('.');
-                if (parts.length === 3) {
-                  const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-                  const u: UserProfile = {
-                    id: payload.sub,
-                    email: payload.email,
-                    displayName: payload.name || payload.email.split('@')[0],
-                    avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(payload.name || payload.email)}`,
-                  };
-                  setUser(u);
-                  localStorage.setItem('darfin_user', JSON.stringify(u));
-                }
-              } catch (e) {
-                console.warn('Failed to parse token payload:', e);
-              }
+          .then((res) => {
+            if (res?.user) {
+              setUser(res.user);
+              localStorage.setItem('darfin_user', JSON.stringify(res.user));
             }
           })
           .catch(console.error);
@@ -182,7 +185,9 @@ export const App: React.FC = () => {
         // Clean query string from browser URL bar
         const url = new URL(window.location.href);
         url.searchParams.delete('auth_token');
-        window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
+        url.searchParams.delete('error');
+        url.searchParams.delete('reason');
+        window.history.replaceState({}, document.title, url.pathname);
       }
     } catch (e) {
       console.warn('OAuth URL parse error:', e);
