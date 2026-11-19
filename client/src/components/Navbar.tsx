@@ -19,29 +19,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-30 border-b border-[#E8E5DF] bg-[#FDFBF7]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        {/* Brand: Minimal D Logo + Wordmark */}
+        {/* Brand: Logo + Wordmark */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B132B] text-white shadow-sm transition hover:scale-105">
-            <svg
-              className="h-6 w-6"
-              viewBox="0 0 48 48"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* Outer D */}
-              <path
-                d="M14 10h11c7.18 0 13 5.82 13 13s-5.82 13-13 13H14V10z"
-                fill="#FDFBF7"
-              />
-              {/* Inner Counter */}
-              <path
-                d="M20 16h5c3.866 0 7 3.134 7 7s-3.134 7-7 7h-5V16z"
-                fill="#0B132B"
-              />
-              {/* Page fold in negative space */}
-              <path d="M25 23l6-7v14l-6-7z" fill="#0D9488" />
-            </svg>
-          </div>
+          <img
+            src="/logo.png"
+            alt="DARFIN BOOK Logo"
+            className="h-10 w-10 rounded-xl object-cover shadow-sm transition hover:scale-105"
+          />
           <div>
             <span className="text-lg font-bold tracking-tight text-[#0B132B]">
               DARFIN BOOK

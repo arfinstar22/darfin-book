@@ -26,24 +26,11 @@ export const AccountView: React.FC<AccountViewProps> = ({ onClearAllData }) => {
         {/* Brand Banner */}
         <div className="rounded-2xl border border-[#E8E5DF] bg-white p-6 shadow-xs">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0B132B] text-white shadow-xs">
-              <svg
-                className="h-7 w-7"
-                viewBox="0 0 48 48"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M14 10h11c7.18 0 13 5.82 13 13s-5.82 13-13 13H14V10z"
-                  fill="#FDFBF7"
-                />
-                <path
-                  d="M20 16h5c3.866 0 7 3.134 7 7s-3.134 7-7 7h-5V16z"
-                  fill="#0B132B"
-                />
-                <path d="M25 23l6-7v14l-6-7z" fill="#0D9488" />
-              </svg>
-            </div>
+            <img
+              src="/logo.png"
+              alt="DARFIN BOOK Logo"
+              className="h-12 w-12 rounded-2xl object-cover shadow-xs"
+            />
             <div>
               <h3 className="text-base font-bold text-[#1A1A1A]">DARFIN BOOK</h3>
               <p className="text-xs text-stone-500">
