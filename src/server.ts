@@ -60,6 +60,77 @@ export async function buildServer() {
     };
   });
 
+  // Privacy Policy for Google OAuth & Public Compliance
+  server.get('/privacy', async (request, reply) => {
+    reply.type('text/html').send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kebijakan Privasi — DARFIN BOOK</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1e293b; background: #fafaf9; }
+    .card { background: white; padding: 32px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    h1 { color: #0f766e; margin-top: 0; }
+    h2 { color: #0f172a; margin-top: 24px; font-size: 1.15rem; }
+    a { color: #0d9488; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Kebijakan Privasi DARFIN BOOK</h1>
+    <p><em>Terakhir diperbarui: 19 November 2026</em></p>
+    <p>DARFIN BOOK ("kami") adalah perpustakaan digital terbuka untuk membaca buku pelajaran resmi, naskah sastra, dan dokumen publik secara legal dan gratis.</p>
+    <h2>1. Data yang Kami Kumpulkan</h2>
+    <p>Ketika Anda menggunakan fitur Masuk dengan Akun Google, kami hanya menerima informasi profil dasar dari Google berupa: <strong>nama lengkap</strong>, <strong>alamat email</strong>, dan <strong>foto profil</strong>.</p>
+    <h2>2. Penggunaan Data</h2>
+    <p>Data profil Google Anda hanya digunakan secara eksklusif untuk:</p>
+    <ul>
+      <li>Mengidentifikasi akun Anda saat menyimpan buku ke rak bacaan pribadi.</li>
+      <li>Menyimpan daftar buku favorit Anda.</li>
+      <li>Menyimpan penanda halaman (bookmark) dan progres membaca.</li>
+    </ul>
+    <h2>3. Keamanan Data & Pihak Ketiga</h2>
+    <p>Kami tidak pernah menjual, menyewakan, atau membagikan data pribadi Anda kepada pihak ketiga mana pun.</p>
+    <h2>4. Kontak</h2>
+    <p>Untuk pertanyaan terkait privasi data, silakan hubungi pengelola melalui email: <a href="mailto:support@darfinbook.id">support@darfinbook.id</a>.</p>
+    <p><a href="/">&larr; Kembali ke Beranda DARFIN BOOK</a></p>
+  </div>
+</body>
+</html>`);
+  });
+
+  // Terms of Service for Google OAuth & Public Compliance
+  server.get('/terms', async (request, reply) => {
+    reply.type('text/html').send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ketentuan Layanan — DARFIN BOOK</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1e293b; background: #fafaf9; }
+    .card { background: white; padding: 32px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    h1 { color: #0f766e; margin-top: 0; }
+    h2 { color: #0f172a; margin-top: 24px; font-size: 1.15rem; }
+    a { color: #0d9488; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Ketentuan Layanan DARFIN BOOK</h1>
+    <p><em>Terakhir diperbarui: 19 November 2026</em></p>
+    <p>Dengan mengakses atau menggunakan DARFIN BOOK, Anda menyetujui ketentuan berikut:</p>
+    <h2>1. Layanan Baca Gratis</h2>
+    <p>Semua materi buku disediakan untuk tujuan pendidikan, penelitian, dan literasi publik sesuai lisensi domain publik dan sumber resmi Kemdikbud.</p>
+    <h2>2. Akun Pengguna</h2>
+    <p>Fitur login menggunakan akun Google disediakan agar Anda dapat menyimpan preferensi rak dan pembatas bacaan Anda di berbagai perangkat.</p>
+    <p><a href="/">&larr; Kembali ke Beranda DARFIN BOOK</a></p>
+  </div>
+</body>
+</html>`);
+  });
+
   // API v1 root
   server.get('/api/v1', async () => {
     return {
