@@ -17,7 +17,6 @@ import {
   Minimize2,
   ChevronLeft,
   ChevronRight,
-  RotateCcw,
   Layers,
   Loader2,
   Download,
@@ -64,6 +63,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [clientTotalPages, setClientTotalPages] = useState<number | null>(null);
 
   // Reader Settings
   const [theme, setTheme] = useState<ReaderTheme>('paper');
@@ -74,7 +74,53 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
 
-  const totalPages = resolution?.totalPages || 100;
+  const totalPages = clientTotalPages || resolution?.totalPages || 100;
+
+  // Background fetch accurate total page count from Internet Archive if server fell back to default
+  useEffect(() => {
+    if (!resolution?.iaIdentifier) return;
+    if (resolution.totalPages && resolution.totalPages > 10) return;
+
+    let isMounted = true;
+    async function fetchIaPages() {
+      try {
+        const res = await fetch(`https://archive.org/metadata/${resolution.iaIdentifier}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        let count: number | null = null;
+        if (data.metadata?.imagecount) count = parseInt(data.metadata.imagecount, 10);
+        if (!count && data.metadata?.pages) count = parseInt(data.metadata.pages, 10);
+
+        const scandata = data.files?.find(
+          (f: any) => f.format === 'Scandata' || f.name?.endsWith('_scandata.xml')
+        );
+        if (!count && scandata) {
+          const scRes = await fetch(
+            `https://archive.org/download/${resolution.iaIdentifier}/${scandata.name}`,
+            { headers: { Range: 'bytes=0-4096' } }
+          );
+          if (scRes.ok) {
+            const text = await scRes.text();
+            const match =
+              text.match(/<leafCount>(\d+)<\/leafCount>/i) ||
+              text.match(/leafCount="(\d+)"/i);
+            if (match) count = parseInt(match[1], 10);
+          }
+        }
+
+        if (isMounted && count && count > 0) {
+          setClientTotalPages(count);
+        }
+      } catch (e) {
+        console.warn('Direct IA total pages fetch error:', e);
+      }
+    }
+
+    fetchIaPages();
+    return () => {
+      isMounted = false;
+    };
+  }, [resolution]);
 
   // Sync page input when currentPage changes
   useEffect(() => {
@@ -213,7 +259,6 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
         if (isMounted) {
           setResolution(res);
-          // Set native reader mode if page template URL is ready
           setUseNativeReader(Boolean(res.pageTemplateUrl));
         }
       } catch (err: unknown) {
@@ -234,12 +279,6 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     };
   }, [book]);
 
-  const themeClasses = {
-    paper: 'theme-paper',
-    sepia: 'theme-sepia',
-    dark: 'theme-dark',
-  };
-
   const scrollToChapter = (chapterId: string) => {
     const el = document.getElementById(chapterId);
     if (el) {
@@ -250,36 +289,73 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
   const hasNativeIaReader = Boolean(resolution?.pageTemplateUrl);
 
+  // Self-contained theme styling that overrides root html dark classes
+  const themeStyles = {
+    paper: {
+      container: 'bg-[#FDFBF7] text-[#1A1A1A]',
+      header: 'bg-white/95 border-stone-200 text-[#1A1A1A] shadow-xs',
+      btnDefault: 'bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/80',
+      btnActive: 'bg-teal-600 text-white font-bold border border-teal-600',
+      themeBox: 'bg-stone-100 border border-stone-200/80',
+      bottomToolbar: 'bg-white/95 border border-stone-200/90 text-[#1A1A1A] shadow-2xl',
+      input: 'bg-stone-100 border border-stone-300 text-[#1A1A1A]',
+      slider: 'accent-teal-600',
+      tagText: 'text-stone-500',
+    },
+    sepia: {
+      container: 'bg-[#F4ECD8] text-[#433422]',
+      header: 'bg-[#EBDDBF]/95 border-[#D5C5A1] text-[#433422] shadow-xs',
+      btnDefault: 'bg-[#E5D7B7] hover:bg-[#DBCB9E] text-[#433422] border border-[#D5C5A1]/80',
+      btnActive: 'bg-[#7A5A35] text-white font-bold border border-[#7A5A35]',
+      themeBox: 'bg-[#E5D7B7] border border-[#D5C5A1]/80',
+      bottomToolbar: 'bg-[#FAF4E6]/95 border border-[#D5C5A1] text-[#433422] shadow-2xl',
+      input: 'bg-[#EBDDBF] border border-[#C8B68F] text-[#433422]',
+      slider: 'accent-[#7A5A35]',
+      tagText: 'text-[#7D6B56]',
+    },
+    dark: {
+      container: 'bg-[#080E1E] text-[#F1F5F9]',
+      header: 'bg-[#0F172A]/95 border-slate-800 text-[#F1F5F9] shadow-xs',
+      btnDefault: 'bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700',
+      btnActive: 'bg-teal-600 text-white font-bold border border-teal-500',
+      themeBox: 'bg-slate-800 border border-slate-700',
+      bottomToolbar: 'bg-[#0F172A]/95 border border-slate-700/80 text-white shadow-2xl',
+      input: 'bg-slate-800 border border-slate-600 text-white',
+      slider: 'accent-teal-500',
+      tagText: 'text-slate-400',
+    },
+  }[theme];
+
   return (
     <div
       ref={containerRef}
-      className={`fixed inset-0 z-50 flex flex-col select-none ${themeClasses[theme]} transition-colors duration-200`}
+      className={`fixed inset-0 z-50 flex flex-col select-none ${themeStyles.container} transition-colors duration-200`}
     >
       {/* Top Header Controls Bar */}
       <header
-        className={`flex items-center justify-between border-b border-black/10 px-3 sm:px-6 py-2.5 backdrop-blur-md transition-all duration-300 z-30 ${
-          isControlsVisible ? 'opacity-100 translate-y-0' : '-translate-y-full opacity-0 pointer-events-none'
-        }`}
+        className={`flex items-center justify-between border-b px-3 sm:px-6 py-2.5 backdrop-blur-md transition-all duration-300 z-30 ${
+          themeStyles.header
+        } ${isControlsVisible ? 'opacity-100 translate-y-0' : '-translate-y-full opacity-0 pointer-events-none'}`}
       >
-        {/* Left: Close Button (Clean, comfortable 44px touch target) */}
+        {/* Left: Close Button (Large, comfortable 44px target) */}
         <div className="flex items-center">
           <button
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black/5 hover:bg-black/10 active:scale-95 transition text-stone-700 dark:text-stone-200"
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl active:scale-95 transition ${themeStyles.btnDefault}`}
             title="Keluar dari pembaca"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Right: Clean, spacious, well-organized Reader Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
+        {/* Right: Clean, spacious, high-contrast Reader Controls */}
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Table of Contents for multi-chapter books */}
           {chapters.length > 1 && (
             <div className="relative">
               <button
                 onClick={() => setShowToc(!showToc)}
-                className="flex h-11 items-center gap-1.5 rounded-2xl border border-black/15 bg-black/5 px-3 text-xs font-semibold hover:bg-black/10 active:scale-95 transition"
+                className={`flex h-11 items-center gap-1.5 rounded-2xl px-3 text-xs font-semibold active:scale-95 transition ${themeStyles.btnDefault}`}
                 title="Daftar Bab & Bagian Buku"
               >
                 <List className="h-4 w-4" />
@@ -311,13 +387,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           {hasNativeIaReader && useNativeReader && (
             <button
               onClick={() => setViewMode(viewMode === 'single' ? 'scroll' : 'single')}
-              className="flex h-11 items-center gap-1.5 rounded-2xl border border-black/15 bg-black/5 px-2.5 sm:px-3.5 text-xs font-semibold hover:bg-black/10 active:scale-95 transition text-stone-800 dark:text-stone-100"
+              className={`flex h-11 items-center gap-1.5 rounded-2xl px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${themeStyles.btnDefault}`}
               title={viewMode === 'single' ? 'Ganti ke Mode Gulir Vertikal (Scroll)' : 'Ganti ke Mode Halaman Satuan (Flip)'}
             >
               {viewMode === 'single' ? (
-                <Layers className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <Layers className="h-4 w-4 text-teal-600" />
               ) : (
-                <BookOpen className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <BookOpen className="h-4 w-4 text-teal-600" />
               )}
               <span className="text-xs font-medium">{viewMode === 'single' ? 'Lembar' : 'Gulir'}</span>
             </button>
@@ -326,31 +402,31 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           {/* Bookmark Button */}
           <button
             onClick={handleBookmarkClick}
-            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl border px-2.5 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${
               bookmarkSavedToast
-                ? 'border-emerald-500 bg-emerald-500 text-white'
-                : 'border-black/15 bg-black/5 hover:bg-black/10 text-stone-800 dark:text-stone-100'
+                ? 'bg-emerald-600 text-white font-bold border border-emerald-600 shadow-sm'
+                : themeStyles.btnDefault
             }`}
             title="Tandai Halaman Ini"
           >
             {bookmarkSavedToast ? (
               <Check className="h-4 w-4" />
             ) : (
-              <Bookmark className="h-4 w-4 text-amber-500" />
+              <Bookmark className="h-4 w-4 text-amber-500 fill-amber-500/20" />
             )}
             <span className="hidden md:inline">
               {bookmarkSavedToast ? 'Tersimpan!' : 'Tandai'}
             </span>
           </button>
 
-          {/* Theme Switcher: 3 large comfortable buttons */}
-          <div className="flex h-11 items-center rounded-2xl border border-black/15 bg-black/5 p-1 gap-1">
+          {/* Theme Switcher: 3 large, distinctive high-contrast buttons */}
+          <div className={`flex h-11 items-center rounded-2xl p-1 gap-1 ${themeStyles.themeBox}`}>
             <button
               onClick={() => setTheme('paper')}
               className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
                 theme === 'paper'
-                  ? 'bg-white shadow-xs text-amber-600 font-bold'
-                  : 'text-stone-500 opacity-60 hover:opacity-100'
+                  ? 'bg-white shadow-md text-amber-700 font-bold border border-stone-200'
+                  : 'text-stone-500 hover:text-stone-900'
               }`}
               title="Kertas (Terang)"
             >
@@ -360,8 +436,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               onClick={() => setTheme('sepia')}
               className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
                 theme === 'sepia'
-                  ? 'bg-[#E5D7B7] shadow-xs text-[#5C4227] font-bold'
-                  : 'text-stone-500 opacity-60 hover:opacity-100'
+                  ? 'bg-[#FAF4E6] shadow-md text-[#5C4227] font-bold border border-[#D5C5A1]'
+                  : 'text-stone-500 hover:text-[#5C4227]'
               }`}
               title="Sepia (Hangat & Nyaman)"
             >
@@ -371,8 +447,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               onClick={() => setTheme('dark')}
               className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
                 theme === 'dark'
-                  ? 'bg-slate-700 text-cyan-300 shadow-xs font-bold'
-                  : 'text-stone-500 opacity-60 hover:opacity-100'
+                  ? 'bg-slate-950 shadow-md text-cyan-400 font-bold border border-slate-700'
+                  : 'text-stone-400 hover:text-white'
               }`}
               title="Malam (Gelap OLED)"
             >
@@ -380,13 +456,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             </button>
           </div>
 
-          {/* Fullscreen Toggle Button (Prominent & easy to tap on mobile) */}
+          {/* Fullscreen Toggle Button (Prominent & high contrast) */}
           <button
             onClick={toggleFullscreen}
-            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl border px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition shadow-xs ${
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition shadow-sm ${
               isFullscreen
-                ? 'border-teal-600 bg-teal-600 text-white'
-                : 'border-teal-600/30 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50'
+                ? 'bg-teal-700 text-white font-bold border border-teal-600'
+                : 'bg-teal-600 hover:bg-teal-700 text-white font-bold border border-teal-600'
             }`}
             title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Layar Penuh (Fullscreen)'}
           >
@@ -435,7 +511,6 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               <div
                 className="relative flex-1 flex flex-col justify-center items-center w-full min-h-full"
                 onClick={(e) => {
-                  // If clicked near edges, navigate; if clicked middle, toggle toolbar
                   const rect = e.currentTarget.getBoundingClientRect();
                   const clickX = e.clientX - rect.left;
                   const width = rect.width;
@@ -456,14 +531,14 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 {/* Mode Lembar (Single Page) */}
                 {viewMode === 'single' ? (
                   <div className="relative flex-1 flex items-center justify-center w-full p-2 sm:p-4 overflow-auto">
-                    {/* Navigation Hotspot Indicators (visible on hover) */}
+                    {/* Navigation Hotspot Buttons (hidden on mobile, visible on desktop hover) */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         goToPrevPage();
                       }}
                       disabled={currentPage <= 0}
-                      className="absolute left-2 sm:left-4 z-20 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
+                      className="hidden sm:flex absolute left-4 z-20 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
                       title="Halaman Sebelumnya"
                     >
                       <ChevronLeft className="h-6 w-6" />
@@ -475,7 +550,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         goToNextPage();
                       }}
                       disabled={currentPage >= totalPages - 1}
-                      className="absolute right-2 sm:right-4 z-20 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
+                      className="hidden sm:flex absolute right-4 z-20 rounded-full bg-black/40 text-white p-3 backdrop-blur-sm opacity-20 hover:opacity-100 disabled:opacity-0 transition"
                       title="Halaman Selanjutnya"
                     >
                       <ChevronRight className="h-6 w-6" />
@@ -492,7 +567,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                       {imageLoading && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
                           <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-                          <span className="text-xs font-medium opacity-70">Memuat halaman {currentPage + 1}...</span>
+                          <span className={`text-xs font-medium ${themeStyles.tagText}`}>
+                            Memuat halaman {currentPage + 1}...
+                          </span>
                         </div>
                       )}
 
@@ -502,7 +579,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         alt={`Halaman ${currentPage + 1}`}
                         onLoad={() => setImageLoading(false)}
                         onError={() => setImageLoading(false)}
-                        className={`max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full rounded-md shadow-2xl object-contain transition-opacity duration-200 ${
+                        className={`max-h-[84vh] sm:max-h-[88vh] w-auto max-w-full rounded-md shadow-2xl object-contain transition-opacity duration-200 ${
                           imageLoading ? 'opacity-30' : 'opacity-100'
                         }`}
                         draggable={false}
@@ -515,7 +592,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     <div className="max-w-3xl mx-auto flex flex-col items-center gap-6">
                       {Array.from({ length: totalPages }, (_, idx) => (
                         <div key={idx} className="w-full flex flex-col items-center">
-                          <div className="relative w-full flex justify-center bg-black/5 rounded-xl overflow-hidden shadow-lg border border-black/10">
+                          <div className="relative w-full flex justify-center rounded-xl overflow-hidden shadow-lg border border-black/10">
                             <img
                               src={resolution.pageTemplateUrl!.replace('{page}', String(idx))}
                               alt={`Halaman ${idx + 1}`}
@@ -523,7 +600,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                               className="w-full h-auto object-contain max-h-[92vh]"
                             />
                           </div>
-                          <span className="mt-2 text-[11px] font-mono opacity-50">
+                          <span className={`mt-2 text-[11px] font-mono ${themeStyles.tagText}`}>
                             Halaman {idx + 1} dari {totalPages}
                           </span>
                         </div>
@@ -536,7 +613,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 {viewMode === 'single' && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-2xl border border-black/15 bg-white/95 dark:bg-slate-900/95 px-3 py-2 shadow-2xl backdrop-blur-md transition-all duration-300 text-stone-900 dark:text-white ${
+                    className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-2xl px-3 py-2 transition-all duration-300 ${
+                      themeStyles.bottomToolbar
+                    } ${
                       isControlsVisible
                         ? 'opacity-100 translate-y-0'
                         : 'opacity-0 translate-y-8 pointer-events-none'
@@ -561,13 +640,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         setImageLoading(true);
                         setCurrentPage(Number(e.target.value));
                       }}
-                      className="w-24 sm:w-44 accent-teal-600 h-1.5 cursor-pointer"
+                      className={`w-24 sm:w-44 h-1.5 cursor-pointer ${themeStyles.slider}`}
                       title={`Geser Halaman (1 - ${totalPages})`}
                     />
 
                     {/* Page Number & Direct Jump */}
                     <div className="flex items-center gap-1 text-xs font-semibold">
-                      <span className="opacity-70">Hal.</span>
+                      <span className={themeStyles.tagText}>Hal.</span>
                       <input
                         type="number"
                         min={1}
@@ -583,9 +662,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                             }
                           }
                         }}
-                        className="w-12 text-center rounded border border-black/20 bg-black/5 dark:bg-slate-800 py-0.5 font-mono text-xs text-stone-900 dark:text-white"
+                        className={`w-12 text-center rounded py-0.5 font-mono text-xs ${themeStyles.input}`}
                       />
-                      <span className="opacity-70">/ {totalPages}</span>
+                      <span className={themeStyles.tagText}>/ {totalPages}</span>
                     </div>
 
                     <button
@@ -604,7 +683,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         target="_blank"
                         rel="noreferrer noopener"
                         download
-                        className="hidden sm:flex items-center gap-1 rounded-lg border border-teal-500/30 bg-teal-50 dark:bg-teal-950/50 px-2 py-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:bg-teal-100 transition ml-1"
+                        className="hidden sm:flex items-center gap-1 rounded-lg border border-teal-500/30 bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-100 transition ml-1"
                         title="Unduh File PDF Lengkap"
                       >
                         <Download className="h-3.5 w-3.5" />
@@ -655,23 +734,23 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                   resolution.launchUrl?.includes('kemendikdasmen.go.id') ||
                   resolution.launchUrl?.includes('kemdikbud.go.id')) ? (
                   <div className="mx-auto max-w-xl py-8 px-4 my-auto">
-                    <div className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 dark:bg-slate-900/80 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 mb-4">
+                    <div className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center text-stone-900">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 border border-teal-200 text-teal-600 mb-4">
                         <BookOpen className="h-8 w-8" />
                       </div>
 
-                      <span className="inline-block rounded-full bg-teal-100 dark:bg-teal-900/60 px-3 py-1 text-xs font-bold text-teal-800 dark:text-teal-300">
+                      <span className="inline-block rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-800">
                         Buku Pelajaran Resmi Kurikulum Merdeka
                       </span>
 
-                      <h2 className="mt-3 text-lg font-bold sm:text-xl text-stone-900 dark:text-white">
+                      <h2 className="mt-3 text-lg font-bold sm:text-xl text-stone-900">
                         {book.title}
                       </h2>
-                      <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+                      <p className="mt-1 text-xs text-stone-500">
                         Penerbit: {book.publisher || 'Kementerian Pendidikan Dasar dan Menengah RI'}
                       </p>
 
-                      <div className="mt-6 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 p-4 text-left text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                      <div className="mt-6 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-left text-xs text-amber-900 leading-relaxed">
                         <p className="font-semibold mb-1">Akses Resmi & Aman SIBI Kemendikdasmen:</p>
                         <p>
                           Sesuai protokol keamanan portal pemerintah Kemendikdasmen RI, naskah resmi dan reader interaktif dapat dibaca secara resmi langsung melalui Sistem Informasi Perbukuan Indonesia (SIBI). Akses 100% gratis untuk seluruh siswa dan pendidik di Indonesia.
@@ -693,7 +772,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         <button
                           type="button"
                           onClick={handleBookmarkClick}
-                          className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-semibold hover:bg-stone-50 dark:hover:bg-slate-700 transition"
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs font-semibold hover:bg-stone-50 transition text-stone-800"
                         >
                           <Bookmark className="h-4 w-4 text-teal-600" />
                           <span>{bookmarkSavedToast ? 'Tersimpan ke Rak!' : 'Tandai Buku Ini'}</span>
