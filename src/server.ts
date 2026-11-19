@@ -10,6 +10,8 @@ import { WikisourceProvider } from './providers/wikisource.js';
 import { ReaderResolverService } from './services/readerResolver.js';
 import { SearchService } from './services/search.js';
 import { validateIsbn } from './utils/isbn.js';
+import { createTelegramBot } from './bot/bot.js';
+import { validateTelegramInitData } from './bot/telegramAuth.js';
 
 export async function buildServer() {
   const server = Fastify({
@@ -184,6 +186,48 @@ export async function buildServer() {
 
     return content;
   });
+
+  // Telegram Mini App initData validation
+  server.post('/api/v1/telegram/validate-init-data', async (request, reply) => {
+    const body = request.body as { initData?: string };
+    if (!body?.initData) {
+      return reply.code(400).send({
+        valid: false,
+        error: 'initData wajib dilampirkan',
+      });
+    }
+
+    const result = validateTelegramInitData(body.initData);
+    if (!result.valid) {
+      return reply.code(401).send(result);
+    }
+
+    return result;
+  });
+
+  // Telegram Bot Webhook
+  const telegramBot = createTelegramBot();
+  if (telegramBot) {
+    server.post('/api/v1/telegram/webhook', async (request, reply) => {
+      // Validate secret token if configured
+      if (env.TELEGRAM_WEBHOOK_SECRET) {
+        const headerSecret = request.headers['x-telegram-bot-api-secret-token'];
+        if (headerSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
+          return reply.code(403).send({ error: 'Secret token tidak cocok' });
+        }
+      }
+
+      try {
+        await telegramBot.handleUpdate(request.body as any);
+        return reply.code(200).send({ ok: true });
+      } catch (err: unknown) {
+        server.log.error(err, 'Telegram update processing error');
+        return reply.code(200).send({ ok: false, error: (err as Error).message });
+      }
+    });
+
+    server.log.info('Telegram Bot initialized and webhook route registered at /api/v1/telegram/webhook');
+  }
 
   // Serve static frontend in production if built
   const clientDist = path.resolve(process.cwd(), 'dist/client');
