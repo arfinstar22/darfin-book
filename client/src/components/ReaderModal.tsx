@@ -257,37 +257,34 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     >
       {/* Top Header Controls Bar */}
       <header
-        className={`flex items-center justify-between border-b border-black/10 px-3 py-2.5 backdrop-blur-md transition-all duration-300 z-30 ${
+        className={`flex items-center justify-between border-b border-black/10 px-3 sm:px-6 py-2.5 backdrop-blur-md transition-all duration-300 z-30 ${
           isControlsVisible ? 'opacity-100 translate-y-0' : '-translate-y-full opacity-0 pointer-events-none'
         }`}
       >
-        <div className="flex items-center gap-2 max-w-[50%] sm:max-w-md">
+        {/* Left: Close Button (Clean, comfortable 44px touch target) */}
+        <div className="flex items-center">
           <button
             onClick={onClose}
-            className="rounded-full p-2 hover:bg-black/10 transition shrink-0"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black/5 hover:bg-black/10 active:scale-95 transition text-stone-700 dark:text-stone-200"
             title="Keluar dari pembaca"
           >
             <X className="h-5 w-5" />
           </button>
-          <div className="truncate">
-            <h1 className="text-xs sm:text-sm font-bold truncate leading-tight">{book.title}</h1>
-            <p className="text-[10px] sm:text-xs opacity-70 truncate">{book.authors.join(', ')}</p>
-          </div>
         </div>
 
-        {/* Reader Customizer Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Right: Clean, spacious, well-organized Reader Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* Table of Contents for multi-chapter books */}
           {chapters.length > 1 && (
             <div className="relative">
               <button
                 onClick={() => setShowToc(!showToc)}
-                className="flex items-center gap-1.5 rounded-lg border border-black/15 bg-black/5 px-2.5 py-1 text-xs font-semibold hover:bg-black/10 transition"
+                className="flex h-11 items-center gap-1.5 rounded-2xl border border-black/15 bg-black/5 px-3 text-xs font-semibold hover:bg-black/10 active:scale-95 transition"
                 title="Daftar Bab & Bagian Buku"
               >
-                <List className="h-3.5 w-3.5" />
+                <List className="h-4 w-4" />
                 <span className="hidden sm:inline">Bab ({chapters.length})</span>
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3.5 w-3.5" />
               </button>
 
               {showToc && (
@@ -310,112 +307,91 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             </div>
           )}
 
+          {/* Native In-App Reader: Mode Lembar vs Mode Gulir */}
+          {hasNativeIaReader && useNativeReader && (
+            <button
+              onClick={() => setViewMode(viewMode === 'single' ? 'scroll' : 'single')}
+              className="flex h-11 items-center gap-1.5 rounded-2xl border border-black/15 bg-black/5 px-2.5 sm:px-3.5 text-xs font-semibold hover:bg-black/10 active:scale-95 transition text-stone-800 dark:text-stone-100"
+              title={viewMode === 'single' ? 'Ganti ke Mode Gulir Vertikal (Scroll)' : 'Ganti ke Mode Halaman Satuan (Flip)'}
+            >
+              {viewMode === 'single' ? (
+                <Layers className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              ) : (
+                <BookOpen className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              )}
+              <span className="text-xs font-medium">{viewMode === 'single' ? 'Lembar' : 'Gulir'}</span>
+            </button>
+          )}
+
           {/* Bookmark Button */}
           <button
             onClick={handleBookmarkClick}
-            className={`flex items-center gap-1 rounded-lg border px-2 sm:px-2.5 py-1 text-xs font-semibold transition ${
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl border px-2.5 sm:px-3.5 text-xs font-semibold active:scale-95 transition ${
               bookmarkSavedToast
                 ? 'border-emerald-500 bg-emerald-500 text-white'
-                : 'border-black/15 bg-black/5 hover:bg-black/10'
+                : 'border-black/15 bg-black/5 hover:bg-black/10 text-stone-800 dark:text-stone-100'
             }`}
-            title="Tandai Halaman Ini (Perlu Login)"
+            title="Tandai Halaman Ini"
           >
-            {bookmarkSavedToast ? <Check className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">
+            {bookmarkSavedToast ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Bookmark className="h-4 w-4 text-amber-500" />
+            )}
+            <span className="hidden md:inline">
               {bookmarkSavedToast ? 'Tersimpan!' : 'Tandai'}
             </span>
           </button>
 
-          {/* Native In-App Reader Controls */}
-          {hasNativeIaReader && useNativeReader && (
-            <>
-              {/* View Mode Toggle: Single Page vs Continuous Scroll */}
-              <button
-                onClick={() => setViewMode(viewMode === 'single' ? 'scroll' : 'single')}
-                className="flex items-center gap-1 rounded-lg border border-black/15 bg-black/5 px-2 py-1 text-xs font-semibold hover:bg-black/10 transition"
-                title={viewMode === 'single' ? 'Ganti ke Mode Gulir Vertikal' : 'Ganti ke Mode Halaman Satuan'}
-              >
-                {viewMode === 'single' ? <Layers className="h-3.5 w-3.5" /> : <BookOpen className="h-3.5 w-3.5" />}
-                <span className="hidden md:inline">{viewMode === 'single' ? 'Mode Gulir' : 'Mode Lembar'}</span>
-              </button>
-
-              {/* Zoom Controls (Single page mode) */}
-              {viewMode === 'single' && (
-                <div className="hidden sm:flex items-center rounded-lg border border-black/10 bg-black/5 p-0.5">
-                  <button
-                    onClick={() => setZoomLevel((z) => Math.max(0.7, z - 0.15))}
-                    className="p-1 hover:bg-black/10 rounded"
-                    title="Perkecil Halaman"
-                  >
-                    <ZoomOut className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setZoomLevel(1)}
-                    className="px-1.5 text-[10px] font-mono hover:underline"
-                    title="Reset Ukuran Normal"
-                  >
-                    {Math.round(zoomLevel * 100)}%
-                  </button>
-                  <button
-                    onClick={() => setZoomLevel((z) => Math.min(2.0, z + 0.15))}
-                    className="p-1 hover:bg-black/10 rounded"
-                    title="Perbesar Halaman"
-                  >
-                    <ZoomIn className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Mode Switcher: DARFIN Clean Reader vs Original Archive Embed */}
-          {hasNativeIaReader && (
-            <button
-              onClick={() => setUseNativeReader(!useNativeReader)}
-              className="hidden lg:flex items-center gap-1 rounded-lg border border-black/15 bg-black/5 px-2 py-1 text-[11px] font-semibold hover:bg-black/10 transition"
-              title="Ganti antara Pembaca Nyaman DARFIN dan Frame Asli Archive"
-            >
-              <span>{useNativeReader ? 'Mode Arsip Asli' : 'Pembaca Bersih'}</span>
-            </button>
-          )}
-
-          {/* Theme Switcher */}
-          <div className="flex items-center rounded-lg border border-black/10 bg-black/5 p-0.5">
+          {/* Theme Switcher: 3 large comfortable buttons */}
+          <div className="flex h-11 items-center rounded-2xl border border-black/15 bg-black/5 p-1 gap-1">
             <button
               onClick={() => setTheme('paper')}
-              className={`p-1 rounded transition ${theme === 'paper' ? 'bg-white shadow-xs text-amber-600' : ''}`}
-              title="Mode Kertas (Terang)"
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                theme === 'paper'
+                  ? 'bg-white shadow-xs text-amber-600 font-bold'
+                  : 'text-stone-500 opacity-60 hover:opacity-100'
+              }`}
+              title="Kertas (Terang)"
             >
-              <Sun className="h-3.5 w-3.5" />
+              <Sun className="h-4 w-4" />
             </button>
             <button
               onClick={() => setTheme('sepia')}
-              className={`p-1 rounded transition ${theme === 'sepia' ? 'bg-[#EBDDBF] shadow-xs text-[#8C6D4F]' : ''}`}
-              title="Mode Sepia (Nyaman untuk Mata)"
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                theme === 'sepia'
+                  ? 'bg-[#E5D7B7] shadow-xs text-[#5C4227] font-bold'
+                  : 'text-stone-500 opacity-60 hover:opacity-100'
+              }`}
+              title="Sepia (Hangat & Nyaman)"
             >
-              <Coffee className="h-3.5 w-3.5" />
+              <Coffee className="h-4 w-4" />
             </button>
             <button
               onClick={() => setTheme('dark')}
-              className={`p-1 rounded transition ${theme === 'dark' ? 'bg-slate-700 text-white shadow-xs' : ''}`}
-              title="Mode Malam (Gelap OLED)"
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                theme === 'dark'
+                  ? 'bg-slate-700 text-cyan-300 shadow-xs font-bold'
+                  : 'text-stone-500 opacity-60 hover:opacity-100'
+              }`}
+              title="Malam (Gelap OLED)"
             >
-              <Moon className="h-3.5 w-3.5" />
+              <Moon className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Fullscreen Toggle Button */}
+          {/* Fullscreen Toggle Button (Prominent & easy to tap on mobile) */}
           <button
             onClick={toggleFullscreen}
-            className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition ${
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-2xl border px-3 sm:px-3.5 text-xs font-semibold active:scale-95 transition shadow-xs ${
               isFullscreen
                 ? 'border-teal-600 bg-teal-600 text-white'
-                : 'border-black/15 bg-black/5 hover:bg-black/10 text-teal-700 dark:text-teal-400'
+                : 'border-teal-600/30 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50'
             }`}
             title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Layar Penuh (Fullscreen)'}
           >
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">{isFullscreen ? 'Kecilkan' : 'Layar Penuh'}</span>
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            <span className="hidden sm:inline font-medium">{isFullscreen ? 'Kecilkan' : 'Layar Penuh'}</span>
           </button>
         </div>
       </header>
