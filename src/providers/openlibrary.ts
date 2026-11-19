@@ -78,6 +78,13 @@ export class OpenLibraryProvider implements BookProvider {
         const primaryIsbn = isbns[0] ? cleanIsbn(isbns[0]) : undefined;
         const coverI = doc.cover_i as number | undefined;
 
+        let coverUrl: string | undefined = undefined;
+        if (coverI) {
+          coverUrl = `https://covers.openlibrary.org/b/id/${coverI}-L.jpg`;
+        } else if (primaryIsbn) {
+          coverUrl = `https://covers.openlibrary.org/b/isbn/${primaryIsbn}-L.jpg`;
+        }
+
         results.push({
           provider: 'openlibrary',
           providerId: String(doc.key).replace('/works/', ''),
@@ -88,9 +95,7 @@ export class OpenLibraryProvider implements BookProvider {
           language: languages[0] || 'ind',
           languageCode: normalizedLang.languageCode,
           isIndonesianVerified: normalizedLang.isEligibleForDefaultCatalog,
-          coverUrl: coverI
-            ? `https://covers.openlibrary.org/b/id/${coverI}-M.jpg`
-            : undefined,
+          coverUrl,
           isbn10: primaryIsbn && primaryIsbn.length === 10 ? primaryIsbn : undefined,
           isbn13: primaryIsbn && primaryIsbn.length === 13 ? primaryIsbn : undefined,
           subjects: (doc.subject as string[])?.slice(0, 5) || [],

@@ -27,7 +27,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SD',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/buku-siswa-matematika-kelas-1',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Matematika_SD_Kelas_1.jpg',
     year: 2022,
   },
   {
@@ -38,7 +37,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SD',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/bahasa-indonesia-sd-kelas-1',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Bahasa_Indonesia_SD_Kelas_1.jpg',
     year: 2021,
   },
   {
@@ -49,7 +47,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SD',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/ipas-sd-kelas-4',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_IPAS_SD_Kelas_4.jpg',
     year: 2021,
   },
   {
@@ -60,7 +57,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMP',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/matematika-smp-kelas-7',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Matematika_SMP_Kelas_7.jpg',
     year: 2022,
   },
   {
@@ -71,7 +67,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMP',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/ipa-smp-kelas-7',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_IPA_SMP_Kelas_7.jpg',
     year: 2021,
   },
   {
@@ -82,7 +77,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMP',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/bahasa-indonesia-smp-kelas-7',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Bahasa_Indonesia_SMP_Kelas_7.jpg',
     year: 2021,
   },
   {
@@ -93,7 +87,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMA',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/matematika-sma-kelas-10',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Matematika_SMA_Kelas_10.jpg',
     year: 2021,
   },
   {
@@ -104,7 +97,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMA',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/biologi-sma-kelas-11',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Biologi_SMA_Kelas_11.jpg',
     year: 2022,
   },
   {
@@ -115,7 +107,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMA',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/fisika-sma-kelas-11',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Fisika_SMA_Kelas_11.jpg',
     year: 2022,
   },
   {
@@ -126,7 +117,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMA',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/kimia-sma-kelas-11',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Kimia_SMA_Kelas_11.jpg',
     year: 2022,
   },
   {
@@ -137,7 +127,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMA',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/sejarah-sma-kelas-10',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Sejarah_SMA_Kelas_10.jpg',
     year: 2021,
   },
   {
@@ -148,7 +137,6 @@ const KEMDIKBUD_TEXTBOOKS: EducationalBookItem[] = [
     level: 'SMP',
     publisher: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
     pdfUrl: 'https://buku.kemdikbud.go.id/katalog/pendidikan-pancasila-smp-kelas-8',
-    coverUrl: 'https://static.buku.kemdikbud.go.id/content/thumbnail/Cover_Pancasila_SMP_Kelas_8.jpg',
     year: 2023,
   },
 ];

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { Book } from '../types.js';
 import { getAccessBadge } from './BookCard.js';
+import { BookCoverVisual } from './BookCoverVisual.js';
 
 interface BookDetailModalProps {
   book: Book | null;
@@ -87,18 +88,8 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
           <div className="flex flex-col gap-6 sm:flex-row">
             {/* Cover Column */}
             <div className="flex flex-col items-center sm:w-1/3">
-              <div className="aspect-[3/4] w-44 overflow-hidden rounded-xl border border-[#E8E5DF] bg-[#F4EFEA] shadow-sm">
-                {book.coverUrl ? (
-                  <img
-                    src={book.coverUrl}
-                    alt={book.title}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center p-4 text-center text-xs text-stone-500">
-                    {book.title}
-                  </div>
-                )}
+              <div className="aspect-[3/4] w-44 overflow-hidden rounded-xl border border-[#E8E5DF] shadow-sm">
+                <BookCoverVisual book={book} size="large" />
               </div>
 
               {/* Provider Attribution Pill */}

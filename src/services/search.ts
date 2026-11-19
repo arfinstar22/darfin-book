@@ -47,17 +47,18 @@ export class SearchService {
 
     const collected: ProviderBook[] = [];
 
-    if (kemdikbudRes.status === 'fulfilled') {
-      collected.push(...kemdikbudRes.value);
-    }
-    if (wikisourceRes.status === 'fulfilled') {
-      collected.push(...wikisourceRes.value);
-    }
+    // Prioritize OpenLibrary, GoogleBooks, Kemdikbud, then Wikisource for rich metadata & covers
     if (openLibraryRes.status === 'fulfilled') {
       collected.push(...openLibraryRes.value);
     }
+    if (kemdikbudRes.status === 'fulfilled') {
+      collected.push(...kemdikbudRes.value);
+    }
     if (googleBooksRes.status === 'fulfilled') {
       collected.push(...googleBooksRes.value);
+    }
+    if (wikisourceRes.status === 'fulfilled') {
+      collected.push(...wikisourceRes.value);
     }
 
     // Strict Indonesian filtering
@@ -68,17 +69,17 @@ export class SearchService {
     // Deduplication by title similarity + primary ISBN
     const deduplicated = this.deduplicateBooks(indonesianOnly);
 
-    // If freeOnly is requested, prioritize books with FULL_ACCESS and BORROW_AVAILABLE
-    if (query.freeOnly) {
-      deduplicated.sort((a, b) => {
-        const score = (status: string) => {
-          if (status === 'FULL_ACCESS') return 2;
-          if (status === 'BORROW_AVAILABLE') return 1;
-          return 0;
-        };
-        return score(b.access.status) - score(a.access.status);
-      });
-    }
+    // Smart ranking: Prioritize books with real cover images and verified full access
+    deduplicated.sort((a, b) => {
+      const score = (book: ProviderBook) => {
+        let pts = 0;
+        if (book.coverUrl) pts += 10;
+        if (book.access.status === 'FULL_ACCESS') pts += 5;
+        if (book.access.status === 'BORROW_AVAILABLE') pts += 3;
+        return pts;
+      };
+      return score(b) - score(a);
+    });
 
     return {
       query: trimmed,

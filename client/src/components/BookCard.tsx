@@ -1,6 +1,7 @@
 import React from 'react';
-import { Book as BookIcon, CheckCircle2, Clock, Eye, Info } from 'lucide-react';
+import { CheckCircle2, Clock, Eye, Info } from 'lucide-react';
 import type { AccessStatus, Book } from '../types.js';
+import { BookCoverVisual } from './BookCoverVisual.js';
 
 interface BookCardProps {
   book: Book;
@@ -57,31 +58,13 @@ export const BookCard: React.FC<BookCardProps> = ({
     >
       <div>
         {/* Cover Aspect Ratio Container */}
-        <div className="relative mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl bg-[#F4EFEA]">
-          {book.coverUrl ? (
-            <img
-              src={book.coverUrl}
-              alt={book.title}
-              loading="lazy"
-              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-              onError={(e) => {
-                // Fallback on broken image
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center p-4 text-center">
-              <BookIcon className="h-10 w-10 text-[#A8A29E] stroke-1" />
-              <span className="mt-2 line-clamp-2 text-xs font-semibold text-[#5A5A5A]">
-                {book.title}
-              </span>
-            </div>
-          )}
+        <div className="relative mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl shadow-xs">
+          <BookCoverVisual book={book} />
 
           {/* Access Status Pill */}
-          <div className="absolute top-2 left-2">
+          <div className="absolute top-2 left-2 z-20">
             <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold backdrop-blur-xs ${badge.color}`}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold backdrop-blur-md shadow-xs ${badge.color}`}
             >
               <BadgeIcon className="h-3 w-3" />
               <span>{badge.label}</span>
