@@ -112,6 +112,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             });
 
             googleBtnContainerRef.current.innerHTML = '';
+            const btnWidth = Math.min(320, Math.max(220, window.innerWidth - 64));
             googleObj.accounts.id.renderButton(googleBtnContainerRef.current, {
               type: 'standard',
               theme: 'outline',
@@ -119,7 +120,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               text: 'continue_with',
               shape: 'rectangular',
               logo_alignment: 'left',
-              width: 320,
+              width: btnWidth,
             });
 
             // Trigger Google One Tap account chooser popup
@@ -334,8 +335,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-[#E8E5DF] dark:border-slate-800 bg-white dark:bg-[#0F172A] p-6 shadow-2xl transition-all">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-[#E8E5DF] dark:border-slate-800 bg-white dark:bg-[#0F172A] p-5 sm:p-6 shadow-2xl transition-all">
         {/* Close Button */}
         <button
           onClick={onClose}

@@ -292,7 +292,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       </div>
 
       {/* Catalog Status Info */}
-      <div className="flex items-center justify-between text-xs text-stone-500 dark:text-slate-400">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-stone-500 dark:text-slate-400">
         <p>
           Menampilkan <span className="font-bold text-stone-800 dark:text-slate-200">{filteredBooks.length}</span> dari{' '}
           <span className="font-bold text-teal-600 dark:text-teal-400">

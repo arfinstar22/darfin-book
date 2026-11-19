@@ -549,7 +549,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-6xl px-3 sm:px-6 pt-4 pb-28 sm:pb-14">
         {/* Tab: Beranda (Home) */}
         {currentTab === 'home' && (
           <div>

@@ -53,13 +53,13 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white dark:bg-[#0F172A] border border-[#E8E5DF] dark:border-slate-800 text-[#1A1A1A] dark:text-slate-100 shadow-2xl transition-colors">
         {/* Header Bar */}
-        <div className="flex items-center justify-between border-b border-[#E8E5DF] dark:border-slate-800 px-6 py-4">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between border-b border-[#E8E5DF] dark:border-slate-800 px-4 py-3 sm:px-6 sm:py-4 gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${badge.color}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${badge.color}`}
             >
               <BadgeIcon className="h-3.5 w-3.5" />
               <span>{badge.label}</span>
@@ -70,7 +70,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <button
               onClick={handleShare}
               className="rounded-full p-2 text-stone-500 dark:text-slate-400 hover:bg-stone-100 dark:hover:bg-slate-800 transition"
@@ -89,7 +89,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="flex flex-col gap-6 sm:flex-row">
             {/* Cover Column */}
             <div className="flex flex-col items-center sm:w-1/3">
@@ -157,24 +157,24 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E8E5DF] dark:border-slate-800 bg-[#FAF8F5] dark:bg-[#080E1E] px-6 py-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-[#E8E5DF] dark:border-slate-800 bg-[#FAF8F5] dark:bg-[#080E1E] px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center gap-2">
             <button
               onClick={() => onToggleSave(book)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition ${
+              className={`flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition ${
                 isSaved
                   ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800'
                   : 'border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700'
               }`}
             >
               <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
-              <span>{isSaved ? 'Tersimpan di Rak' : 'Simpan ke Rak'}</span>
+              <span>{isSaved ? 'Tersimpan' : 'Simpan ke Rak'}</span>
             </button>
 
             {onToggleFavorite && (
               <button
                 onClick={() => onToggleFavorite(book)}
-                className={`flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition ${
+                className={`flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition ${
                   isFavorite
                     ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                     : 'border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700'
@@ -193,9 +193,9 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 href={book.sourceUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="flex items-center gap-1.5 rounded-xl border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-xs font-semibold text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700 transition"
+                className="flex-1 sm:flex-none justify-center flex items-center gap-1.5 rounded-xl border border-[#DCD8CE] dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-xs font-semibold text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-700 transition"
               >
-                <span>Buka Sumber Resmi</span>
+                <span>Sumber Resmi</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             )}
@@ -206,7 +206,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
                   onClose();
                   onRead(book);
                 }}
-                className="flex items-center gap-2 rounded-xl bg-[#0B132B] dark:bg-teal-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0D9488] dark:hover:bg-teal-500 transition"
+                className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl bg-[#0B132B] dark:bg-teal-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0D9488] dark:hover:bg-teal-500 transition cursor-pointer"
               >
                 <BookOpen className="h-4 w-4" />
                 <span>Baca Sekarang</span>
@@ -218,10 +218,10 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
                 href={book.access.officialItemUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="flex items-center gap-2 rounded-xl bg-[#0284C7] dark:bg-sky-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0369A1] dark:hover:bg-sky-500 transition"
+                className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl bg-[#0284C7] dark:bg-sky-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0369A1] dark:hover:bg-sky-500 transition"
               >
                 <BookOpen className="h-4 w-4" />
-                <span>Pinjam Buku Resmi</span>
+                <span>Pinjam Resmi</span>
               </a>
             )}
           </div>

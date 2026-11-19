@@ -198,10 +198,10 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             </span>
           </button>
 
-          {/* Font Family Toggle */}
+          {/* Font Family Toggle (hidden on mobile) */}
           <button
             onClick={() => setIsSerif(!isSerif)}
-            className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
+            className={`hidden sm:inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
               isSerif ? 'border-teal-600 text-teal-600' : 'border-black/20'
             }`}
             title="Ganti Font Serif / Sans"
@@ -209,8 +209,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
             {isSerif ? 'Serif' : 'Sans'}
           </button>
 
-          {/* Font Size Adjusters */}
-          <div className="flex items-center rounded-lg border border-black/10 bg-black/5 p-0.5">
+          {/* Font Size Adjusters (hidden on mobile) */}
+          <div className="hidden sm:flex items-center rounded-lg border border-black/10 bg-black/5 p-0.5">
             <button
               onClick={() => setFontSize(Math.max(14, fontSize - 2))}
               className="p-1 hover:bg-black/10 rounded"
