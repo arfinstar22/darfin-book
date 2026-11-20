@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Clock, Eye, Info, Heart } from 'lucide-react';
+import { CheckCircle2, Clock, Eye, Info, Heart, Trash2 } from 'lucide-react';
 import type { AccessStatus, Book } from '../types.js';
 import { BookCoverVisual } from './BookCoverVisual.js';
 
@@ -9,6 +9,7 @@ interface BookCardProps {
   onReadDirect?: (book: Book) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (book: Book) => void;
+  onRemove?: (book: Book) => void;
 }
 
 export const getAccessBadge = (status: AccessStatus) => {
@@ -46,6 +47,7 @@ export const BookCard: React.FC<BookCardProps> = ({
   onReadDirect,
   isFavorite = false,
   onToggleFavorite,
+  onRemove,
 }) => {
   const badge = getAccessBadge(book.access.status);
   const BadgeIcon = badge.icon;
@@ -65,17 +67,22 @@ export const BookCard: React.FC<BookCardProps> = ({
         <div className="relative mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl shadow-xs bg-[#F4EFEA] dark:bg-slate-900">
           <BookCoverVisual book={book} />
 
-          {/* Access Status Pill - positioned at bottom-left to avoid collision with top-right actions */}
-          <div className="absolute bottom-2 left-2 z-20 max-w-[calc(100%-1rem)] pointer-events-none">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md shadow-xs truncate ${badge.color}`}
+          {/* Remove from Shelf Button (Top-Left corner) */}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(book);
+              }}
+              className="absolute top-2 left-2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white/80 hover:bg-rose-600 hover:text-white backdrop-blur-md shadow-xs transition cursor-pointer"
+              title="Hapus dari Rak"
             >
-              <BadgeIcon className="h-3 w-3 shrink-0" />
-              <span className="truncate">{badge.label}</span>
-            </span>
-          </div>
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
 
-          {/* Favorite Button */}
+          {/* Favorite Button (Top-Right corner) */}
           {onToggleFavorite && (
             <button
               type="button"
@@ -83,7 +90,7 @@ export const BookCard: React.FC<BookCardProps> = ({
                 e.stopPropagation();
                 onToggleFavorite(book);
               }}
-              className={`absolute top-2 right-2 z-20 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-md shadow-xs transition ${
+              className={`absolute top-2 right-2 z-20 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-md shadow-xs transition cursor-pointer ${
                 isFavorite
                   ? 'bg-rose-500 text-white'
                   : 'bg-black/30 text-white/80 hover:bg-black/50 hover:text-white'
@@ -93,6 +100,16 @@ export const BookCard: React.FC<BookCardProps> = ({
               <Heart className={`h-3.5 w-3.5 ${isFavorite ? 'fill-current' : ''}`} />
             </button>
           )}
+
+          {/* Access Status Pill - positioned at bottom-left */}
+          <div className="absolute bottom-2 left-2 z-20 max-w-[calc(100%-1rem)] pointer-events-none">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md shadow-xs truncate ${badge.color}`}
+            >
+              <BadgeIcon className="h-3 w-3 shrink-0" />
+              <span className="truncate">{badge.label}</span>
+            </span>
+          </div>
         </div>
 
         {/* Title & Author */}

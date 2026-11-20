@@ -210,25 +210,15 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {displayedBooks.map((book) => (
-                <div key={`${book.provider}-${book.providerId}`} className="relative group">
-                  <BookCard
-                    book={book}
-                    onSelect={onSelectBook}
-                    onReadDirect={onReadDirect}
-                    isFavorite={isFavorite(book)}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveFromShelf(book);
-                    }}
-                    className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 dark:bg-slate-800/90 text-stone-400 dark:text-slate-400 shadow-sm hover:text-rose-600 dark:hover:text-rose-400 transition"
-                    title="Hapus dari Rak"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                <BookCard
+                  key={`${book.provider}-${book.providerId}`}
+                  book={book}
+                  onSelect={onSelectBook}
+                  onReadDirect={onReadDirect}
+                  isFavorite={isFavorite(book)}
+                  onToggleFavorite={onToggleFavorite}
+                  onRemove={onRemoveFromShelf}
+                />
               ))}
             </div>
           )}
