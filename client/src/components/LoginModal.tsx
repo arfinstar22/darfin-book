@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -9,11 +9,14 @@ import {
   Loader2,
   ShieldCheck,
   Trash2,
-  User,
   Mail,
   ArrowRight,
+  ChevronDown,
 } from 'lucide-react';
-import { loginWithGoogleApi } from '../api.js';
+import {
+  loginWithGoogleApi,
+  getAuthConfigApi,
+} from '../api.js';
 import type { UserProfile } from '../types.js';
 
 interface LoginModalProps {
@@ -43,9 +46,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Email & Name input for 100% in-app login (no external browser)
-  const [emailInput, setEmailInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
+  // Google OAuth Client ID & SDK
+  const [googleClientId, setGoogleClientId] = useState<string>('');
+  const googleBtnContainerRef = useRef<HTMLDivElement>(null);
+
+  // Manual fallback toggle
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualName, setManualName] = useState('');
 
   // Load accounts previously logged into on this device
   useEffect(() => {
@@ -64,13 +72,68 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   }, [isOpen]);
 
-  // Reset errors and input states when modal opens
+  // Load Google Auth configuration & initialize Google Identity Services
   useEffect(() => {
-    if (isOpen) {
-      setError(null);
-      setIsLoading(false);
-      setSelectedEmail(null);
-    }
+    if (!isOpen) return;
+
+    let isMounted = true;
+    getAuthConfigApi().then((cfg) => {
+      if (!isMounted) return;
+      const cid = cfg.googleClientId || '';
+      setGoogleClientId(cid);
+
+      if (cid) {
+        const googleObj = (window as any).google;
+        if (googleObj?.accounts?.id) {
+          try {
+            googleObj.accounts.id.initialize({
+              client_id: cid,
+              callback: async (res: any) => {
+                if (res?.credential) {
+                  setIsLoading(true);
+                  setError(null);
+                  try {
+                    const authRes = await loginWithGoogleApi({ credential: res.credential });
+                    saveAccountToDevice(authRes.user);
+                    onLoginSuccess(authRes.user, authRes.token);
+                    onClose();
+                  } catch (err: any) {
+                    setError(err.message || 'Gagal masuk dengan Google');
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }
+              },
+              auto_select: false,
+              cancel_on_tap_outside: true,
+            });
+
+            if (googleBtnContainerRef.current) {
+              googleBtnContainerRef.current.innerHTML = '';
+              const btnWidth = Math.min(320, Math.max(220, window.innerWidth - 64));
+              googleObj.accounts.id.renderButton(googleBtnContainerRef.current, {
+                type: 'standard',
+                theme: 'outline',
+                size: 'large',
+                text: 'continue_with',
+                shape: 'rectangular',
+                logo_alignment: 'left',
+                width: btnWidth,
+              });
+            }
+
+            // Trigger Google One Tap account chooser popup
+            googleObj.accounts.id.prompt();
+          } catch (e) {
+            console.warn('Google Identity Services initialization warning:', e);
+          }
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen]);
 
   const saveAccountToDevice = (user: UserProfile) => {
@@ -90,7 +153,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setDeviceAccounts(newList);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newList));
     } catch {
-      // Ignore storage errors
+      // Ignore
     }
   };
 
@@ -114,25 +177,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       case 'save':
         return {
           title: 'Simpan ke Rak Buku',
-          desc: 'Masuk dengan akun Google Anda untuk menyimpan buku ini ke koleksi pribadi.',
+          desc: 'Pilih akun Google Anda untuk menyimpan buku ini ke koleksi pribadi.',
           icon: Bookmark,
         };
       case 'favorite':
         return {
           title: 'Tambah ke Buku Favorit',
-          desc: 'Masuk dengan akun Google Anda untuk menandai buku kesukaan Anda.',
+          desc: 'Pilih akun Google Anda untuk menandai buku kesukaan Anda.',
           icon: Heart,
         };
       case 'bookmark':
         return {
           title: 'Tandai Halaman Baca',
-          desc: 'Masuk dengan akun Google Anda untuk menyimpan penanda dan progres membaca.',
+          desc: 'Pilih akun Google Anda untuk menyimpan penanda dan progres membaca.',
           icon: BookOpen,
         };
       default:
         return {
-          title: 'Masuk ke DARFIN BOOK',
-          desc: 'Sinkronkan rak buku, favorit, dan pembatas bacaan Anda di semua perangkat.',
+          title: 'Masuk dengan Akun Google',
+          desc: 'Pilih akun Google untuk menyinkronkan rak buku, favorit, dan pembatas bacaan di cloud.',
           icon: Sparkles,
         };
     }
@@ -141,51 +204,66 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const reasonInfo = getReasonInfo();
   const ReasonIcon = reasonInfo.icon;
 
-  // In-app direct login handler: 100% inside APK, NO browser redirect!
-  const handleInAppLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    let email = emailInput.trim().toLowerCase();
-
-    if (!email) {
-      setError('Silakan masukkan alamat email Gmail Anda.');
-      return;
-    }
-
-    // Smart auto-complete: if user only typed username (e.g. 'darfinstar'), auto-append @gmail.com
-    if (!email.includes('@')) {
-      email = `${email}@gmail.com`;
-    }
-
-    if (!email.includes('.') || email.length < 5) {
-      setError('Format email tidak valid (contoh: nama@gmail.com)');
-      return;
-    }
-
+  // Primary: Official Google Sign-In with Account Chooser (No Client Secret Required!)
+  const handlePrimaryGoogleSignIn = async () => {
     setIsLoading(true);
     setError(null);
 
-    const displayName =
-      nameInput.trim() ||
-      email
-        .split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase());
+    const googleObj = (window as any).google;
+    const cid = googleClientId || '922505812682-kmk334il5k1pvvq1bsgch63099oo33k4.apps.googleusercontent.com';
 
-    try {
-      const res = await loginWithGoogleApi({
-        email,
-        name: displayName,
-        picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`,
-      });
+    if (googleObj?.accounts?.oauth2) {
+      try {
+        const tokenClient = googleObj.accounts.oauth2.initTokenClient({
+          client_id: cid,
+          scope: 'openid email profile',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse.error) {
+              setIsLoading(false);
+              setError('Login Google dibatalkan atau terjadi kesalahan.');
+              return;
+            }
+            if (tokenResponse.access_token) {
+              try {
+                // Fetch verified profile from Google's userinfo API
+                const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const profile = await userInfoRes.json();
+                if (profile.email) {
+                  const authRes = await loginWithGoogleApi({
+                    email: profile.email,
+                    name: profile.name,
+                    picture: profile.picture,
+                    googleId: profile.sub,
+                  });
+                  saveAccountToDevice(authRes.user);
+                  onLoginSuccess(authRes.user, authRes.token);
+                  onClose();
+                } else {
+                  setError('Gagal membaca profil dari akun Google Anda.');
+                }
+              } catch (err: any) {
+                setError(err.message || 'Gagal masuk dengan Google');
+              } finally {
+                setIsLoading(false);
+              }
+            }
+          },
+        });
 
-      saveAccountToDevice(res.user);
-      onLoginSuccess(res.user, res.token);
-      onClose();
-    } catch (err: unknown) {
-      setError((err as Error).message || 'Gagal masuk ke akun Anda. Silakan coba lagi.');
-    } finally {
-      setIsLoading(false);
+        // Opens Google account picker popup (handled in-app by MainActivity on Android)
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch (e: any) {
+        console.warn('initTokenClient error:', e);
+      }
     }
+
+    // Fallback: If Google SDK is still loading or offline, show manual Gmail form
+    setIsLoading(false);
+    setShowManualForm(true);
+    setError('Memuat modul Google SDK... Silakan gunakan form Gmail di bawah atau coba ketuk tombol lagi.');
   };
 
   // Quick 1-click login for an account previously used on this device
@@ -209,6 +287,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     } finally {
       setIsLoading(false);
       setSelectedEmail(null);
+    }
+  };
+
+  // Fallback manual submit
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let email = manualEmail.trim().toLowerCase();
+    if (!email) return;
+    if (!email.includes('@')) email = `${email}@gmail.com`;
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await loginWithGoogleApi({
+        email,
+        name: manualName.trim() || undefined,
+        picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(manualName || email)}`,
+      });
+      saveAccountToDevice(res.user);
+      onLoginSuccess(res.user, res.token);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Gagal masuk');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -257,7 +360,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {deviceAccounts.length > 0 && (
           <div className="mt-4">
             <p className="text-[11px] font-semibold text-stone-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
-              Pilih Akun di Perangkat Ini
+              Pilih Akun Tersimpan di Perangkat Ini
             </p>
             <div className="divide-y divide-stone-100 dark:divide-slate-800/80 rounded-2xl border border-[#E8E5DF] dark:border-slate-800 overflow-hidden bg-stone-50/50 dark:bg-slate-900/50">
               {deviceAccounts.map((acc) => {
@@ -309,84 +412,81 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
         )}
 
-        {/* In-App Direct Login Form (100% Inside APK, No Browser Redirect) */}
-        <div className="mt-4">
-          {deviceAccounts.length > 0 && (
-            <p className="text-[11px] font-semibold text-stone-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
-              Atau Masuk Akun Lain
-            </p>
-          )}
+        {/* PRIMARY ACTION: Official Google Sign-In */}
+        <div className="mt-5 space-y-3">
+          {/* GIS rendered button container (if initialized) */}
+          <div ref={googleBtnContainerRef} className="flex justify-center empty:hidden"></div>
 
-          <form onSubmit={handleInAppLogin} className="space-y-3 rounded-2xl bg-stone-50 dark:bg-slate-900/60 border border-stone-200 dark:border-slate-800 p-4">
-            <div>
-              <label className="block text-[11px] font-semibold text-stone-700 dark:text-slate-300 mb-1">
-                Alamat Gmail / Email Google:
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 dark:text-slate-500" />
-                <input
-                  type="text"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="nama.anda@gmail.com"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  disabled={isLoading}
-                  required
-                  className="w-full rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-9 pr-3 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+          {/* Official Large Google Button */}
+          <button
+            type="button"
+            onClick={handlePrimaryGoogleSignIn}
+            disabled={isLoading}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3.5 text-xs font-bold text-stone-800 dark:text-white shadow-xs hover:bg-stone-50 dark:hover:bg-slate-700 active:scale-[0.99] transition disabled:opacity-50"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
+            ) : (
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-stone-700 dark:text-slate-300 mb-1">
-                Nama Lengkap (Opsional):
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 dark:text-slate-500" />
-                <input
-                  type="text"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="Contoh: Darfin"
-                  disabled={isLoading}
-                  className="w-full rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-9 pr-3 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
                 />
-              </div>
-            </div>
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+            )}
+            <span>Pilih Akun Google (Google Sign-In)</span>
+          </button>
 
+          {/* Collapsible Alternative Manual Form (Only if desired) */}
+          <div className="pt-2">
             <button
-              type="submit"
-              disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 hover:bg-teal-700 px-4 py-3 text-xs font-bold text-white shadow-sm transition disabled:opacity-50 active:scale-[0.99]"
+              type="button"
+              onClick={() => setShowManualForm(!showManualForm)}
+              className="flex items-center justify-center gap-1 text-[11px] text-stone-500 dark:text-slate-400 hover:text-stone-700 dark:hover:text-slate-200 transition mx-auto py-1"
             >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin text-white" />
-              ) : (
-                <>
-                  <svg className="h-4 w-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Masuk Sekarang (Tetap di Aplikasi)</span>
-                </>
-              )}
+              <span>Atau ketik alamat Gmail manual</span>
+              <ChevronDown className={`h-3 w-3 transition-transform ${showManualForm ? 'rotate-180' : ''}`} />
             </button>
-          </form>
+
+            {showManualForm && (
+              <form onSubmit={handleManualSubmit} className="mt-3 space-y-2.5 rounded-2xl bg-stone-50 dark:bg-slate-900/60 border border-stone-200 dark:border-slate-800 p-3.5 animate-in fade-in">
+                <input
+                  type="email"
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                  placeholder="nama.anda@gmail.com"
+                  required
+                  className="w-full rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:border-teal-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                  placeholder="Nama Lengkap (Opsional)"
+                  className="w-full rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:border-teal-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-teal-700 transition"
+                >
+                  Masuk Manual
+                </button>
+              </form>
+            )}
+          </div>
         </div>
 
         {/* Footer Dismiss */}
