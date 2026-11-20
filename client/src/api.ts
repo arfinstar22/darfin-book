@@ -1,6 +1,9 @@
+import { Capacitor } from '@capacitor/core';
 import type { Book, CuratedShelf, ReaderResolution, UserProfile, BookmarkItem, ReadingProgressItem } from './types.js';
 
-const API_BASE = '/api/v1';
+export const API_BASE = Capacitor.isNativePlatform()
+  ? 'https://darfin-book.onrender.com/api/v1'
+  : '/api/v1';
 
 export async function getAuthConfigApi(): Promise<{ googleClientId: string; hasGoogleOAuth: boolean }> {
   try {

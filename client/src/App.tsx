@@ -18,6 +18,7 @@ import {
   toggleFavoriteBookApi,
   saveBookmarkApi,
   deleteBookmarkApi,
+  API_BASE,
 } from './api.js';
 import { AccountView } from './components/AccountView.js';
 import { BookCard } from './components/BookCard.js';
@@ -211,7 +212,7 @@ export const App: React.FC = () => {
         }
 
         // Confirm with server /api/v1/auth/me
-        fetch('/api/v1/auth/me', {
+        fetch(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${authToken}` },
         })
           .then((r) => (r.ok ? r.json() : null))
