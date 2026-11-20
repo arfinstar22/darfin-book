@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bookmark, Trash2, BookOpen, Heart, Sparkles } from 'lucide-react';
+import { Bookmark, Trash2, BookOpen, Heart, Sparkles, RotateCw } from 'lucide-react';
 import type { Book, BookmarkItem, UserProfile } from '../types.js';
 import { BookCard } from './BookCard.js';
 
@@ -12,6 +12,8 @@ interface ShelfViewProps {
   onRemoveFromShelf: (book: Book) => void;
   onToggleFavorite?: (book: Book) => void;
   onClearShelf: () => void;
+  onSyncLibrary?: () => void;
+  isSyncing?: boolean;
   user?: UserProfile | null;
   onOpenLogin?: () => void;
   onDeleteBookmark?: (id: string) => void;
@@ -26,6 +28,8 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
   onRemoveFromShelf,
   onToggleFavorite,
   onClearShelf,
+  onSyncLibrary,
+  isSyncing = false,
   user,
   onOpenLogin,
   onDeleteBookmark,
@@ -50,15 +54,30 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
           </p>
         </div>
 
-        {savedBooks.length > 0 && activeFilter !== 'bookmarks' && (
-          <button
-            onClick={onClearShelf}
-            className="flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition self-start sm:self-auto"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>Kosongkan Rak</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {user && onSyncLibrary && (
+            <button
+              type="button"
+              onClick={onSyncLibrary}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/30 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition disabled:opacity-50 cursor-pointer"
+              title="Sinkronkan dengan rak cloud"
+            >
+              <RotateCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan'}</span>
+            </button>
+          )}
+
+          {savedBooks.length > 0 && activeFilter !== 'bookmarks' && (
+            <button
+              onClick={onClearShelf}
+              className="flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Kosongkan Rak</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Tabs */}

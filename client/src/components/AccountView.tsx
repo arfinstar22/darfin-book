@@ -13,6 +13,7 @@ import {
   Heart,
   BookOpen,
   UserCheck,
+  RotateCw,
 } from 'lucide-react';
 import type { UserProfile } from '../types.js';
 
@@ -23,6 +24,8 @@ interface AccountViewProps {
   user?: UserProfile | null;
   onOpenLogin?: () => void;
   onLogout?: () => void;
+  onSyncLibrary?: () => void;
+  isSyncing?: boolean;
   savedCount?: number;
   favoriteCount?: number;
   bookmarkCount?: number;
@@ -35,6 +38,8 @@ export const AccountView: React.FC<AccountViewProps> = ({
   user,
   onOpenLogin,
   onLogout,
+  onSyncLibrary,
+  isSyncing = false,
   savedCount = 0,
   favoriteCount = 0,
   bookmarkCount = 0,
@@ -130,6 +135,38 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   Pembatas Halaman
                 </div>
               </div>
+            </div>
+
+            {/* Cloud Sync Section */}
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50 p-3.5">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/70 text-teal-700 dark:text-teal-300 ${isSyncing ? 'animate-spin' : ''}`}>
+                  <RotateCw className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-[#1A1A1A] dark:text-white flex items-center gap-1.5">
+                    <span>Sinkronisasi Cloud Aktif</span>
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                  <div className="text-[11px] text-stone-500 dark:text-slate-400">
+                    {isSyncing
+                      ? 'Sedang mengunduh rak buku & favorit dari cloud...'
+                      : 'Data buku tersimpan aman dan terhubung dengan server cloud.'}
+                  </div>
+                </div>
+              </div>
+
+              {onSyncLibrary && (
+                <button
+                  type="button"
+                  onClick={onSyncLibrary}
+                  disabled={isSyncing}
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-[#0D9488] hover:bg-teal-700 active:scale-95 text-white px-3.5 py-2 text-xs font-semibold shadow-xs transition cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <RotateCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (

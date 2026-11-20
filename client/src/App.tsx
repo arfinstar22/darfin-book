@@ -233,6 +233,96 @@ export const App: React.FC = () => {
         }
       })
       .catch(console.error);
+
+    // Immediately trigger full library cloud fetch
+    refreshUserLibrary(authToken, false);
+  };
+
+  // Cloud library synchronization state
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Centralized robust library sync
+  const refreshUserLibrary = async (authToken?: string, showFeedback = false) => {
+    const activeToken = authToken || token || localStorage.getItem('darfin_token');
+    if (!activeToken) return;
+
+    setIsSyncing(true);
+    try {
+      let localBooks: Book[] = [];
+      let localFavs: string[] = [];
+      let localBm: BookmarkItem[] = [];
+
+      try {
+        const rawB = localStorage.getItem('darfin_saved_books');
+        if (rawB) localBooks = JSON.parse(rawB);
+        const rawF = localStorage.getItem('darfin_favorites');
+        if (rawF) localFavs = JSON.parse(rawF);
+        const rawM = localStorage.getItem('darfin_bookmarks');
+        if (rawM) localBm = JSON.parse(rawM);
+      } catch (e) {
+        console.warn('Gagal membaca storage lokal:', e);
+      }
+
+      let unified: {
+        books: Book[];
+        favoriteIds: string[];
+        bookmarks: BookmarkItem[];
+      } | null = null;
+
+      try {
+        unified = await syncUserLibraryApi(
+          {
+            books: localBooks,
+            favoriteIds: localFavs,
+            bookmarks: localBm,
+          },
+          activeToken
+        );
+      } catch (syncErr) {
+        console.warn('POST /user/sync gagal, mencoba GET fallback /user/library:', syncErr);
+        unified = await fetchUserLibraryApi(activeToken);
+      }
+
+      if (unified) {
+        if (Array.isArray(unified.books)) {
+          const serverKeys = new Set(unified.books.map((b) => `${b.provider}:${b.providerId}`));
+          const localOnly = localBooks.filter((b) => !serverKeys.has(`${b.provider}:${b.providerId}`));
+          const merged = [...unified.books, ...localOnly];
+          setSavedBooks(merged);
+          localStorage.setItem('darfin_saved_books', JSON.stringify(merged));
+        }
+
+        if (Array.isArray(unified.favoriteIds)) {
+          const mergedFavs = Array.from(new Set([...unified.favoriteIds, ...localFavs]));
+          setFavoriteIds(mergedFavs);
+          localStorage.setItem('darfin_favorites', JSON.stringify(mergedFavs));
+        }
+
+        if (Array.isArray(unified.bookmarks)) {
+          const bmKeys = new Set(unified.bookmarks.map((b) => `${b.bookId}:${b.locationValue}`));
+          const localOnlyBm = localBm.filter((b) => !bmKeys.has(`${b.bookId}:${b.locationValue}`));
+          const mergedBm = [...unified.bookmarks, ...localOnlyBm];
+          setBookmarks(mergedBm);
+          localStorage.setItem('darfin_bookmarks', JSON.stringify(mergedBm));
+        }
+
+        if (showFeedback) {
+          const count = Array.isArray(unified.books) ? unified.books.length : 0;
+          addToast(
+            `Rak buku cloud tersinkronisasi (${count} buku).`,
+            'success',
+            'Sinkronisasi Selesai'
+          );
+        }
+      }
+    } catch (err: any) {
+      console.error('Gagal sinkronisasi perpustakaan:', err);
+      if (showFeedback) {
+        addToast(err?.message || 'Gagal sinkronisasi dengan server.', 'error', 'Gagal Sinkron');
+      }
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Check for Google OAuth callback token in URL (?auth_token=...) and clean legacy error parameters
@@ -271,61 +361,16 @@ export const App: React.FC = () => {
 
   // Bidirectional cloud sync with server when logged in or on window focus
   useEffect(() => {
-    if (!token) return;
+    const activeToken = token || localStorage.getItem('darfin_token');
+    if (!activeToken) return;
 
-    let isMounted = true;
-
-    async function syncLibrary() {
-      try {
-        let localBooks: Book[] = [];
-        let localFavs: string[] = [];
-        let localBm: BookmarkItem[] = [];
-
-        try {
-          const rawB = localStorage.getItem('darfin_saved_books');
-          if (rawB) localBooks = JSON.parse(rawB);
-          const rawF = localStorage.getItem('darfin_favorites');
-          if (rawF) localFavs = JSON.parse(rawF);
-          const rawM = localStorage.getItem('darfin_bookmarks');
-          if (rawM) localBm = JSON.parse(rawM);
-        } catch (e) {
-          console.warn('Gagal membaca storage lokal:', e);
-        }
-
-        const unified = await syncUserLibraryApi(
-          {
-            books: localBooks,
-            favoriteIds: localFavs,
-            bookmarks: localBm,
-          },
-          token!
-        );
-
-        if (!isMounted) return;
-
-        if (Array.isArray(unified.books)) {
-          setSavedBooks(unified.books);
-          localStorage.setItem('darfin_saved_books', JSON.stringify(unified.books));
-        }
-        if (Array.isArray(unified.favoriteIds)) {
-          setFavoriteIds(unified.favoriteIds);
-          localStorage.setItem('darfin_favorites', JSON.stringify(unified.favoriteIds));
-        }
-        if (Array.isArray(unified.bookmarks)) {
-          setBookmarks(unified.bookmarks);
-          localStorage.setItem('darfin_bookmarks', JSON.stringify(unified.bookmarks));
-        }
-      } catch (err) {
-        console.error('Gagal sinkronisasi perpustakaan:', err);
-      }
-    }
-
-    syncLibrary();
+    refreshUserLibrary(activeToken);
 
     // Re-sync when switching tabs or switching back to app window
     const handleVisibilityOrFocus = () => {
-      if (document.visibilityState === 'visible' && token) {
-        syncLibrary();
+      if (document.visibilityState === 'visible') {
+        const curToken = token || localStorage.getItem('darfin_token');
+        if (curToken) refreshUserLibrary(curToken);
       }
     };
 
@@ -334,16 +379,16 @@ export const App: React.FC = () => {
 
     // Silent background sync every 30 seconds while app is active
     const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible' && token) {
-        syncLibrary();
+      if (document.visibilityState === 'visible') {
+        const curToken = token || localStorage.getItem('darfin_token');
+        if (curToken) refreshUserLibrary(curToken);
       }
     }, 30000);
 
     return () => {
-      isMounted = false;
-      clearInterval(intervalId);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      clearInterval(intervalId);
     };
   }, [token, currentTab]);
 
@@ -524,40 +569,7 @@ export const App: React.FC = () => {
     addToast(`Selamat datang, ${newUser.displayName}!`, 'success', 'Login Berhasil');
 
     // Trigger immediate cloud synchronization upon login
-    try {
-      const rawB = localStorage.getItem('darfin_saved_books');
-      const curBooks: Book[] = rawB ? JSON.parse(rawB) : savedBooks;
-      const rawF = localStorage.getItem('darfin_favorites');
-      const curFavs: string[] = rawF ? JSON.parse(rawF) : favoriteIds;
-      const rawM = localStorage.getItem('darfin_bookmarks');
-      const curBm: BookmarkItem[] = rawM ? JSON.parse(rawM) : bookmarks;
-
-      syncUserLibraryApi(
-        {
-          books: curBooks,
-          favoriteIds: curFavs,
-          bookmarks: curBm,
-        },
-        newToken
-      )
-        .then((unified) => {
-          if (Array.isArray(unified.books)) {
-            setSavedBooks(unified.books);
-            localStorage.setItem('darfin_saved_books', JSON.stringify(unified.books));
-          }
-          if (Array.isArray(unified.favoriteIds)) {
-            setFavoriteIds(unified.favoriteIds);
-            localStorage.setItem('darfin_favorites', JSON.stringify(unified.favoriteIds));
-          }
-          if (Array.isArray(unified.bookmarks)) {
-            setBookmarks(unified.bookmarks);
-            localStorage.setItem('darfin_bookmarks', JSON.stringify(unified.bookmarks));
-          }
-        })
-        .catch(console.error);
-    } catch (e) {
-      console.warn('Sync on login error:', e);
-    }
+    refreshUserLibrary(newToken, true);
 
     // Process pending action
     if (pendingBookAction) {
@@ -800,6 +812,8 @@ export const App: React.FC = () => {
             onRemoveFromShelf={handleToggleSave}
             onToggleFavorite={handleToggleFavorite}
             onClearShelf={handleClearShelf}
+            onSyncLibrary={() => refreshUserLibrary(undefined, true)}
+            isSyncing={isSyncing}
             user={user}
             onOpenLogin={() => {
               setLoginReason('save');
@@ -821,6 +835,8 @@ export const App: React.FC = () => {
               setIsLoginModalOpen(true);
             }}
             onLogout={handleLogout}
+            onSyncLibrary={() => refreshUserLibrary(undefined, true)}
+            isSyncing={isSyncing}
             savedCount={savedBooks.length}
             favoriteCount={favoriteIds.length}
             bookmarkCount={bookmarks.length}
