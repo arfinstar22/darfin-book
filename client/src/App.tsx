@@ -42,6 +42,20 @@ export const App: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Book[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [freeOnly, setFreeOnly] = useState(false);
+  const [catalogCount, setCatalogCount] = useState<number>(136920);
+
+  // Live fetch total Indonesian catalog size on startup
+  useEffect(() => {
+    searchBooks('*', false, 1, 0)
+      .then((res) => {
+        if (res.total && res.total > 0) {
+          setCatalogCount(res.total);
+        }
+      })
+      .catch((err) => {
+        console.warn('Catalog count fetch error:', err);
+      });
+  }, []);
 
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -715,6 +729,7 @@ export const App: React.FC = () => {
               <HomeView
                 shelves={shelves}
                 loadingShelves={loadingShelves}
+                totalCatalogCount={catalogCount}
                 onSelectBook={setSelectedBook}
                 onReadBook={setActiveReadingBook}
                 onToggleFavorite={handleToggleFavorite}
@@ -737,6 +752,7 @@ export const App: React.FC = () => {
         {currentTab === 'explore' && (
           <ExploreView
             initialCategory={exploreCategory}
+            totalCatalogCount={catalogCount}
             onCategorySelect={(catQuery) => {
               setSearchQuery(catQuery);
               handleSearch(catQuery, freeOnly);

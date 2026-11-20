@@ -14,10 +14,11 @@ import {
 } from 'lucide-react';
 import { searchBooks } from '../api.js';
 import { BookCard } from './BookCard.js';
-import type { Book } from '../types.js';
+import { formatCatalogCount, type Book } from '../types.js';
 
 interface ExploreViewProps {
   initialCategory?: string;
+  totalCatalogCount?: number;
   onCategorySelect?: (query: string) => void;
   onBookSelect: (book: Book) => void;
   onReadBook: (book: Book) => void;
@@ -27,10 +28,10 @@ interface ExploreViewProps {
   onRequestLogin: (reason: 'save' | 'favorite' | 'bookmark') => void;
 }
 
-const CATEGORIES = [
+const BASE_CATEGORIES = [
   {
     id: 'all',
-    title: 'Semua Koleksi (30.000+)',
+    title: 'Semua Koleksi',
     shortTitle: 'Semua Koleksi',
     query: '*',
     icon: Layers,
@@ -88,6 +89,7 @@ const CATEGORIES = [
 
 export const ExploreView: React.FC<ExploreViewProps> = ({
   initialCategory,
+  totalCatalogCount: propCatalogCount = 136920,
   onBookSelect,
   onReadBook,
   onToggleFavorite,
@@ -101,7 +103,14 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     }
   }, [initialCategory]);
   const [books, setBooks] = useState<Book[]>([]);
-  const [totalCatalogCount, setTotalCatalogCount] = useState<number>(30607);
+  const [totalCatalogCount, setTotalCatalogCount] = useState<number>(propCatalogCount);
+
+  useEffect(() => {
+    if (propCatalogCount && propCatalogCount > 30000) {
+      setTotalCatalogCount((prev) => Math.max(prev, propCatalogCount));
+    }
+  }, [propCatalogCount]);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [hasMore, setHasMore] = useState<boolean>(true);
@@ -109,10 +118,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const [filterFreeOnly, setFilterFreeOnly] = useState<boolean>(false);
   const [searchFilter, setSearchFilter] = useState<string>('');
 
+  const formattedCount = formatCatalogCount(totalCatalogCount);
+
   // Fetch initial books whenever category or free filter changes
   useEffect(() => {
     let isMounted = true;
-    const cat = CATEGORIES.find((c) => c.id === activeCategory) || CATEGORIES[0];
+    const cat = BASE_CATEGORIES.find((c) => c.id === activeCategory) || BASE_CATEGORIES[0];
 
     async function loadInitialCategoryBooks() {
       setIsLoading(true);
@@ -125,8 +136,8 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         const res = await searchBooks(queryToFetch, filterFreeOnly, 30, 0);
         if (isMounted) {
           setBooks(res.books);
-          setTotalCatalogCount(res.total || 30607);
-          setHasMore(res.books.length >= 20 && res.books.length < (res.total || 30607));
+          setTotalCatalogCount(res.total || propCatalogCount);
+          setHasMore(res.books.length >= 20 && res.books.length < (res.total || propCatalogCount));
         }
       } catch (err: unknown) {
         if (isMounted) {
@@ -144,7 +155,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeCategory, filterFreeOnly]);
+  }, [activeCategory, filterFreeOnly, propCatalogCount]);
 
   // Handle server-side pagination for "Muat Lebih Banyak"
   const handleLoadMore = async () => {
@@ -152,7 +163,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     setIsLoadingMore(true);
 
     try {
-      const cat = CATEGORIES.find((c) => c.id === activeCategory) || CATEGORIES[0];
+      const cat = BASE_CATEGORIES.find((c) => c.id === activeCategory) || BASE_CATEGORIES[0];
       const queryToFetch = searchFilter.trim() || cat.query;
       const res = await searchBooks(queryToFetch, filterFreeOnly, 30, books.length);
 
@@ -218,10 +229,10 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-teal-500/20 border border-teal-400/30 px-3 py-1 text-xs font-semibold text-teal-300 mb-3">
             <Compass className="h-3.5 w-3.5" />
-            <span>Katalog Lengkap Nusantara (30.000+ Koleksi)</span>
+            <span>Katalog Lengkap Nusantara ({formattedCount} Koleksi)</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Jelajahi 30.000+ Buku Legal &amp; Gratis
+            Jelajahi {formattedCount} Buku Legal &amp; Gratis
           </h2>
           <p className="mt-2 text-xs sm:text-sm text-stone-300 leading-relaxed">
             Akses tak terbatas ke buku pelajaran resmi Kemendikdasmen Kurikulum Merdeka, karya sastra pujangga baru, naskah kuno nusantara, dan ensiklopedia terbuka.
@@ -259,7 +270,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#E8E5DF] dark:border-slate-800 pb-4">
         {/* Horizontal Category Chips */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-          {CATEGORIES.map((cat) => {
+          {BASE_CATEGORIES.map((cat) => {
             const Icon = cat.icon;
             const isActive = activeCategory === cat.id;
             return (
@@ -277,7 +288,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
-                <span>{cat.shortTitle}</span>
+                <span>{cat.id === 'all' ? `Semua Koleksi (${formattedCount})` : cat.shortTitle}</span>
               </button>
             );
           })}
@@ -317,7 +328,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         <div className="flex min-h-[35vh] flex-col items-center justify-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
           <span className="text-xs font-medium text-stone-600 dark:text-slate-400">
-            Menghubungkan ke katalog 30.000+ buku nusantara...
+            Menghubungkan ke katalog {formattedCount} buku nusantara...
           </span>
         </div>
       )}

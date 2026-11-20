@@ -103,3 +103,9 @@ export interface ReadingProgressItem {
   progressPercent?: number | null;
   lastReadAt?: string | null;
 }
+
+export function formatCatalogCount(count: number): string {
+  if (!count || count < 1000) return '100.000+';
+  const thousands = Math.floor(count / 1000);
+  return `${thousands.toLocaleString('id-ID')}.000+`;
+}

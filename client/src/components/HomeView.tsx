@@ -17,11 +17,12 @@ import {
   BookMarked,
 } from 'lucide-react';
 import { BookCard } from './BookCard.js';
-import type { Book, CuratedShelf } from '../types.js';
+import { formatCatalogCount, type Book, type CuratedShelf } from '../types.js';
 
 interface HomeViewProps {
   shelves: CuratedShelf[];
   loadingShelves: boolean;
+  totalCatalogCount?: number;
   onSelectBook: (book: Book) => void;
   onReadBook: (book: Book) => void;
   onToggleFavorite: (book: Book) => void;
@@ -66,6 +67,7 @@ const LITERARY_QUOTES = [
 export const HomeView: React.FC<HomeViewProps> = ({
   shelves,
   loadingShelves,
+  totalCatalogCount = 136920,
   onSelectBook,
   onReadBook,
   onToggleFavorite,
@@ -80,6 +82,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   const currentQuote = LITERARY_QUOTES[quoteIndex];
+  const formattedCount = formatCatalogCount(totalCatalogCount);
 
   return (
     <div className="space-y-12 pb-16">
@@ -89,7 +92,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           {/* Badge */}
           <div className="inline-flex items-center gap-2 rounded-full bg-teal-500/20 border border-teal-400/30 px-3.5 py-1 text-xs font-semibold text-teal-300 backdrop-blur-xs mb-4">
             <Sparkles className="h-3.5 w-3.5 text-teal-400" />
-            <span>Perpustakaan Terbuka Indonesia - 30.000+ Koleksi Bebas</span>
+            <span>Perpustakaan Terbuka Indonesia - {formattedCount} Koleksi Bebas</span>
           </div>
 
           {/* Headline */}
@@ -109,7 +112,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="inline-flex items-center gap-2 rounded-2xl bg-[#0D9488] px-5 py-3 text-xs sm:text-sm font-bold text-white shadow-lg shadow-teal-700/30 hover:bg-teal-700 transition cursor-pointer"
             >
               <Compass className="h-4 w-4" />
-              <span>Jelajahi 30.000+ Buku</span>
+              <span>Jelajahi {formattedCount} Buku</span>
             </button>
 
             <button
