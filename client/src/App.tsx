@@ -195,6 +195,46 @@ export const App: React.FC = () => {
     }
   }, [savedBooks, favoriteIds, bookmarks]);
 
+  // Helper to safely parse JWT profile
+  const applyAuthToken = (authToken: string) => {
+    setToken(authToken);
+    localStorage.setItem('darfin_token', authToken);
+    setIsLoginModalOpen(false);
+
+    try {
+      const parts = authToken.split('.');
+      if (parts.length === 3) {
+        let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const payload = JSON.parse(decodeURIComponent(escape(atob(b64))));
+        const u: UserProfile = {
+          id: payload.sub,
+          email: payload.email,
+          displayName: payload.name || payload.email?.split('@')[0] || 'Pengguna',
+          avatarUrl: payload.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(payload.name || payload.email)}`,
+        };
+        setUser(u);
+        localStorage.setItem('darfin_user', JSON.stringify(u));
+        addToast(`Selamat datang kembali, ${u.displayName}!`, 'success', 'Berhasil Masuk');
+      }
+    } catch (e) {
+      console.warn('Failed to parse token payload:', e);
+    }
+
+    // Confirm with server /api/v1/auth/me
+    fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        if (res?.user) {
+          setUser(res.user);
+          localStorage.setItem('darfin_user', JSON.stringify(res.user));
+        }
+      })
+      .catch(console.error);
+  };
+
   // Check for Google OAuth callback token in URL (?auth_token=...) and clean legacy error parameters
   useEffect(() => {
     try {
@@ -203,40 +243,9 @@ export const App: React.FC = () => {
       const errorParam = params.get('error');
 
       if (authToken) {
-        setToken(authToken);
-        localStorage.setItem('darfin_token', authToken);
-
-        // Parse user profile immediately from signed token payload
-        try {
-          const parts = authToken.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-            const u: UserProfile = {
-              id: payload.sub,
-              email: payload.email,
-              displayName: payload.name || payload.email?.split('@')[0] || 'Pengguna',
-              avatarUrl: payload.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(payload.name || payload.email)}`,
-            };
-            setUser(u);
-            localStorage.setItem('darfin_user', JSON.stringify(u));
-            addToast(`Selamat datang kembali, ${u.displayName}!`, 'success', 'Berhasil Masuk');
-          }
-        } catch (e) {
-          console.warn('Failed to parse token payload:', e);
-        }
-
-        // Confirm with server /api/v1/auth/me
-        fetch(`${API_BASE}/auth/me`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((res) => {
-            if (res?.user) {
-              setUser(res.user);
-              localStorage.setItem('darfin_user', JSON.stringify(res.user));
-            }
-          })
-          .catch(console.error);
+        applyAuthToken(authToken);
+      } else if (errorParam) {
+        addToast(`Login Google gagal: ${errorParam}`, 'error', 'Gagal Masuk');
       }
 
       // Always clean lingering query string from browser URL bar (e.g. error, auth_token, reason)
@@ -247,6 +256,17 @@ export const App: React.FC = () => {
     } catch (e) {
       console.warn('OAuth URL parse error:', e);
     }
+  }, []);
+
+  // Listen for direct token dispatch from Android MainActivity
+  useEffect(() => {
+    const handleAuthMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'DARFIN_AUTH_TOKEN' && e.data?.token) {
+        applyAuthToken(e.data.token);
+      }
+    };
+    window.addEventListener('message', handleAuthMessage);
+    return () => window.removeEventListener('message', handleAuthMessage);
   }, []);
 
   // Bidirectional cloud sync with server when logged in or on window focus

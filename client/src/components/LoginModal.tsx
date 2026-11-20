@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   X,
   Sparkles,
@@ -84,8 +85,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setHasGoogleOAuth(Boolean(cfg.hasGoogleOAuth && cfg.googleClientId));
       setGoogleClientId(cfg.googleClientId || '');
 
-      // Initialize Google Identity Services (GIS) if client ID is configured
-      if (cfg.googleClientId) {
+      // Initialize Google Identity Services (GIS) if client ID is configured (Web Desktop only)
+      if (cfg.googleClientId && !Capacitor.isNativePlatform()) {
         const googleObj = (window as any).google;
         if (googleObj?.accounts?.id && googleBtnContainerRef.current) {
           try {
@@ -210,7 +211,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsLoading(true);
     setError(null);
 
-    // 1. Try Google Identity Services OAuth2 Token Popup (Client-side, NO client_secret required!)
+    // 1. If running on native platform (Capacitor Android APK):
+    // MUST NOT use Google Identity Services popup (initTokenClient) because popup postMessage
+    // fails across the WebView / external browser boundary, leaving a blank tab in Chrome.
+    // Instead, use OAuth 2.0 authorization code flow with state=android.
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const res = await getGoogleAuthUrlApi('android');
+        if (res.configured && res.url) {
+          window.location.href = res.url;
+          return;
+        }
+
+        setShowDirectEmail(true);
+        setError(
+          'Server belum mengonfigurasi GOOGLE_CLIENT_ID. Silakan gunakan form Gmail di bawah ini.'
+        );
+      } catch (err: unknown) {
+        setError((err as Error).message || 'Gagal memulai autentikasi Google');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // 2. On desktop web: Try Google Identity Services OAuth2 Token Popup (Client-side, NO client_secret required!)
     const googleObj = (window as any).google;
     if (googleClientId && googleObj?.accounts?.oauth2) {
       try {
@@ -432,8 +457,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         {/* Primary Action: Official Google Sign-In */}
         <div className="mt-5 space-y-3">
-          {/* If Google Identity Services iframe is loaded */}
-          {googleClientId && (
+          {/* If Google Identity Services iframe is loaded (Web Desktop only) */}
+          {!Capacitor.isNativePlatform() && googleClientId && (
             <div className="flex justify-center">
               <div ref={googleBtnContainerRef}></div>
             </div>

@@ -362,6 +362,138 @@ export async function buildServer() {
     return `https://${host}/api/v1/auth/google/callback`;
   };
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderAuthBridgeHtml(params: {
+  success: boolean;
+  token?: string;
+  user?: { displayName?: string; email?: string };
+  error?: string;
+}): string {
+  const isSuccess = params.success && Boolean(params.token);
+  const token = params.token || '';
+  const appSchemeUrl = `darfinbook://auth?token=${encodeURIComponent(token)}`;
+  const intentUrl = `intent://auth?token=${encodeURIComponent(token)}#Intent;scheme=darfinbook;package=id.darfinbook.app;end`;
+  const name = params.user?.displayName || params.user?.email || 'Pengguna';
+  const errorMsg = params.error || 'Autentikasi gagal';
+
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>${isSuccess ? 'Login Berhasil' : 'Login Gagal'} — DARFIN BOOK</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #080E1E;
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      background: #0F172A;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 36px 24px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+    }
+    .icon-badge {
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      background: ${isSuccess ? 'rgba(13, 148, 136, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+      border: 1px solid ${isSuccess ? 'rgba(13, 148, 136, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #94A3B8;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      background: ${isSuccess ? '#0D9488' : '#334155'};
+      color: #FFFFFF;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 20px;
+      border-radius: 14px;
+      box-shadow: ${isSuccess ? '0 4px 14px rgba(13, 148, 136, 0.4)' : 'none'};
+      transition: background 0.2s;
+    }
+    .btn:active {
+      background: ${isSuccess ? '#0F766E' : '#1E293B'};
+    }
+    .footnote {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #64748B;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-badge">${isSuccess ? '✓' : '✕'}</div>
+    <h1>${isSuccess ? 'Login Berhasil!' : 'Login Tidak Berhasil'}</h1>
+    <p>${
+      isSuccess
+        ? `Selamat datang kembali, <strong>${escapeHtml(name)}</strong>.<br>Membuka aplikasi DARFIN BOOK...`
+        : escapeHtml(errorMsg)
+    }</p>
+    ${
+      isSuccess
+        ? `<a id="openAppBtn" href="${appSchemeUrl}" class="btn">Buka Aplikasi DARFIN BOOK</a>
+           <div class="footnote">Jika tidak berpindah otomatis, ketuk tombol di atas.</div>`
+        : `<a href="darfinbook://auth?error=cancel" class="btn">Kembali ke Aplikasi</a>`
+    }
+  </div>
+  ${
+    isSuccess
+      ? `<script>
+    var appUrl = "${appSchemeUrl}";
+    var intentUrl = "${intentUrl}";
+    try {
+      localStorage.setItem('darfin_token', "${token}");
+    } catch(e) {}
+    window.location.href = appUrl;
+    setTimeout(function() {
+      window.location.href = intentUrl;
+    }, 450);
+  </script>`
+      : ''
+  }
+</body>
+</html>`;
+}
+
   // Official Google OAuth 2.0 URL generator
   server.get('/api/v1/auth/google/url', async (request, reply) => {
     if (!env.GOOGLE_CLIENT_ID) {
@@ -372,6 +504,8 @@ export async function buildServer() {
     }
 
     const redirectUri = getGoogleRedirectUri(request);
+    const query = request.query as { platform?: string };
+    const platform = query?.platform || 'web';
 
     const params = new URLSearchParams({
       client_id: env.GOOGLE_CLIENT_ID.trim(),
@@ -380,6 +514,7 @@ export async function buildServer() {
       scope: 'openid email profile',
       prompt: 'select_account',
       access_type: 'online',
+      state: platform,
     });
 
     return {
@@ -390,13 +525,27 @@ export async function buildServer() {
 
   // Official Google OAuth 2.0 Redirect Callback
   server.get('/api/v1/auth/google/callback', async (request, reply) => {
-    const { code, error } = request.query as { code?: string; error?: string };
+    const { code, error, state } = request.query as { code?: string; error?: string; state?: string };
+    const isAndroid = state === 'android';
+
     if (error) {
       server.log.warn({ error }, 'Google OAuth redirected with error');
+      if (isAndroid) {
+        return reply.type('text/html').send(renderAuthBridgeHtml({
+          success: false,
+          error: error || 'Login Google dibatalkan',
+        }));
+      }
       return reply.redirect(`/?error=${encodeURIComponent(error)}`);
     }
 
     if (!code || !env.GOOGLE_CLIENT_ID) {
+      if (isAndroid) {
+        return reply.type('text/html').send(renderAuthBridgeHtml({
+          success: false,
+          error: 'Kode otentikasi Google tidak ditemukan',
+        }));
+      }
       return reply.redirect('/?error=google_auth_failed');
     }
 
@@ -430,6 +579,12 @@ export async function buildServer() {
       if (!tokenData.access_token && !tokenData.id_token) {
         server.log.error({ tokenData, redirectUri, hasSecret: Boolean(clientSecret) }, 'Google OAuth token exchange failed');
         const reason = tokenData.error_description || tokenData.error || 'token_exchange_failed';
+        if (isAndroid) {
+          return reply.type('text/html').send(renderAuthBridgeHtml({
+            success: false,
+            error: reason,
+          }));
+        }
         return reply.redirect(`/?error=token_exchange_failed&reason=${encodeURIComponent(reason)}`);
       }
 
@@ -472,6 +627,12 @@ export async function buildServer() {
       }
 
       if (!email) {
+        if (isAndroid) {
+          return reply.type('text/html').send(renderAuthBridgeHtml({
+            success: false,
+            error: 'Alamat email tidak ditemukan dari profil Google',
+          }));
+        }
         return reply.redirect('/?error=email_not_found');
       }
 
@@ -482,9 +643,23 @@ export async function buildServer() {
         googleId,
       });
 
+      if (isAndroid) {
+        return reply.type('text/html').send(renderAuthBridgeHtml({
+          success: true,
+          token: authResult.token,
+          user: authResult.user,
+        }));
+      }
+
       return reply.redirect(`/?auth_token=${encodeURIComponent(authResult.token)}`);
     } catch (err: any) {
       server.log.error({ err }, 'Google OAuth callback exchange exception');
+      if (isAndroid) {
+        return reply.type('text/html').send(renderAuthBridgeHtml({
+          success: false,
+          error: err?.message || 'Terjadi kesalahan sistem saat verifikasi Google OAuth',
+        }));
+      }
       return reply.redirect(`/?error=google_auth_error&details=${encodeURIComponent(err?.message || '')}`);
     }
   });

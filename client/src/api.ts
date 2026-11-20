@@ -17,9 +17,13 @@ export async function getAuthConfigApi(): Promise<{ googleClientId: string; hasG
   return { googleClientId: '', hasGoogleOAuth: false };
 }
 
-export async function getGoogleAuthUrlApi(): Promise<{ configured: boolean; url?: string; error?: string }> {
+export async function getGoogleAuthUrlApi(platform?: string): Promise<{ configured: boolean; url?: string; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/auth/google/url`);
+    const url = new URL(`${API_BASE}/auth/google/url`, window.location.origin);
+    if (platform) {
+      url.searchParams.set('platform', platform);
+    }
+    const res = await fetch(url.toString());
     if (res.ok) {
       return res.json();
     }
