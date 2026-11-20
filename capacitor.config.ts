@@ -5,6 +5,7 @@ const config: CapacitorConfig = {
   appName: 'DARFIN BOOK',
   webDir: 'dist/client',
   server: {
+    url: 'https://darfin-book.onrender.com',
     androidScheme: 'https',
     cleartext: false,
   },
