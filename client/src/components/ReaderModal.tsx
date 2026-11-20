@@ -62,6 +62,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [pageInput, setPageInput] = useState('1');
   const [imageLoading, setImageLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [clientTotalPages, setClientTotalPages] = useState<number | null>(null);
@@ -79,10 +80,26 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [showToc, setShowToc] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const lastTapTime = useRef<number>(0);
   const tapTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Mobile Pinch-to-Zoom & Pan Gesture Tracking Refs
+  const zoomLevelRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const isFlippingRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const dragXRef = useRef(0);
+  const isPanningRef = useRef(false);
+  const isPinchingRef = useRef(false);
+  const initialPinchDist = useRef(0);
+  const initialZoom = useRef(1);
+  const panStart = useRef({ x: 0, y: 0 });
+  const touchMovedRef = useRef(false);
+  const isMouseDownRef = useRef(false);
+  const mouseStartRef = useRef({ x: 0, y: 0 });
 
   const totalPages = clientTotalPages || resolution?.totalPages || 100;
 
@@ -214,46 +231,34 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentPage, totalPages, zoomLevel, isFlipping]);
 
-  // Touch Swipe Handlers for mobile (with 3D page curl)
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1 && zoomLevel <= 1 && !isFlipping) {
-      touchStartX.current = e.touches[0].clientX;
-      touchStartY.current = e.touches[0].clientY;
-      setIsDragging(true);
-      setDragX(0);
-    }
-  };
+  // Keep refs synchronized for high-performance touch & gesture handling
+  useEffect(() => {
+    zoomLevelRef.current = zoomLevel;
+  }, [zoomLevel]);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || zoomLevel > 1 || !isDragging || isFlipping) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = currentX - touchStartX.current;
-    const diffY = currentY - (touchStartY.current || 0);
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
 
-    // Track horizontal swipe if horizontal movement is dominant
-    if (Math.abs(diffX) > Math.abs(diffY)) {
-      setDragX(diffX);
-    }
-  };
+  useEffect(() => {
+    isFlippingRef.current = isFlipping;
+  }, [isFlipping]);
 
-  const handleTouchEnd = () => {
-    if (zoomLevel <= 1 && isDragging && !isFlipping) {
-      if (dragX < -50) {
-        goToNextPage();
-      } else if (dragX > 50) {
-        goToPrevPage();
-      }
-    }
-    touchStartX.current = null;
-    touchStartY.current = null;
-    setIsDragging(false);
-    setDragX(0);
-  };
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
 
-  // 3D Page Turn Forward
+  useEffect(() => {
+    dragXRef.current = dragX;
+  }, [dragX]);
+
+  // 3D Page Turn Forward (Auto resets zoom & pan)
   const goToNextPage = () => {
-    if (currentPage >= totalPages - 1 || isFlipping) return;
+    if (currentPage >= totalPages - 1 || isFlippingRef.current) return;
+    setZoomLevel(1);
+    setPan({ x: 0, y: 0 });
+    zoomLevelRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
     setFlipDirection('next');
     setIsFlipping(true);
     setTimeout(() => {
@@ -264,9 +269,13 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     }, 360);
   };
 
-  // 3D Page Turn Backward
+  // 3D Page Turn Backward (Auto resets zoom & pan)
   const goToPrevPage = () => {
-    if (currentPage <= 0 || isFlipping) return;
+    if (currentPage <= 0 || isFlippingRef.current) return;
+    setZoomLevel(1);
+    setPan({ x: 0, y: 0 });
+    zoomLevelRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
     setFlipDirection('prev');
     setIsFlipping(true);
     setTimeout(() => {
@@ -277,38 +286,213 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     }, 360);
   };
 
-  // Zoom Helpers
+  // Native non-passive Touch Gesture Engine for Pinch-to-Zoom (2 Fingers) and Pan (1 Finger)
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || viewMode !== 'single') return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      touchMovedRef.current = false;
+
+      // 2 fingers = Pinch-to-zoom
+      if (e.touches.length === 2) {
+        isPinchingRef.current = true;
+        isDraggingRef.current = false;
+        isPanningRef.current = false;
+        setIsDragging(false);
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialPinchDist.current = Math.hypot(dx, dy);
+        initialZoom.current = zoomLevelRef.current;
+      } else if (e.touches.length === 1) {
+        touchStartX.current = e.touches[0].clientX;
+        touchStartY.current = e.touches[0].clientY;
+
+        if (zoomLevelRef.current > 1.05) {
+          // 1 finger while zoomed in = Pan viewport
+          isPanningRef.current = true;
+          panStart.current = {
+            x: e.touches[0].clientX - panRef.current.x,
+            y: e.touches[0].clientY - panRef.current.y,
+          };
+        } else if (!isFlippingRef.current) {
+          // 1 finger at normal zoom = 3D Paper Flip curl
+          isDraggingRef.current = true;
+          setIsDragging(true);
+          setDragX(0);
+          dragXRef.current = 0;
+        }
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      // 2 fingers = Smooth Pinch to Zoom
+      if (e.touches.length === 2 && initialPinchDist.current > 0) {
+        if (e.cancelable) e.preventDefault();
+        touchMovedRef.current = true;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const factor = dist / initialPinchDist.current;
+        const nextZoom = Math.max(1, Math.min(3.5, Math.round(initialZoom.current * factor * 100) / 100));
+        setZoomLevel(nextZoom);
+        zoomLevelRef.current = nextZoom;
+
+        if (nextZoom <= 1.05) {
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+        }
+      } else if (e.touches.length === 1) {
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+        const diffX = currentX - (touchStartX.current ?? currentX);
+        const diffY = currentY - (touchStartY.current ?? currentY);
+
+        if (Math.hypot(diffX, diffY) > 8) {
+          touchMovedRef.current = true;
+        }
+
+        if (isPanningRef.current && zoomLevelRef.current > 1.05) {
+          if (e.cancelable) e.preventDefault();
+          const nextX = currentX - panStart.current.x;
+          const nextY = currentY - panStart.current.y;
+          // Clamp panning limits so the page doesn't disappear offscreen
+          const maxPanX = (window.innerWidth * (zoomLevelRef.current - 1)) / 1.5 + 40;
+          const maxPanY = (window.innerHeight * (zoomLevelRef.current - 1)) / 1.5 + 40;
+          const clamped = {
+            x: Math.max(-maxPanX, Math.min(maxPanX, nextX)),
+            y: Math.max(-maxPanY, Math.min(maxPanY, nextY)),
+          };
+          setPan(clamped);
+          panRef.current = clamped;
+        } else if (isDraggingRef.current && zoomLevelRef.current <= 1.05 && !isFlippingRef.current) {
+          if (Math.abs(diffX) > Math.abs(diffY)) {
+            if (e.cancelable) e.preventDefault();
+            setDragX(diffX);
+            dragXRef.current = diffX;
+          }
+        }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        isPinchingRef.current = false;
+        initialPinchDist.current = 0;
+      }
+      if (e.touches.length === 0) {
+        isPanningRef.current = false;
+        if (zoomLevelRef.current <= 1.05) {
+          setZoomLevel(1);
+          zoomLevelRef.current = 1;
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
+
+          // Trigger page flip on significant swipe
+          if (dragXRef.current < -50) {
+            goToNextPage();
+          } else if (dragXRef.current > 50) {
+            goToPrevPage();
+          }
+        }
+        touchStartX.current = null;
+        touchStartY.current = null;
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        setDragX(0);
+        dragXRef.current = 0;
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: false });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [viewMode, currentPage, totalPages]);
+
+  // Desktop Mouse Drag to Pan when zoomed in
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1.05) {
+      isMouseDownRef.current = true;
+      mouseStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isMouseDownRef.current && zoomLevel > 1.05) {
+      touchMovedRef.current = true;
+      const nx = e.clientX - mouseStartRef.current.x;
+      const ny = e.clientY - mouseStartRef.current.y;
+      const maxPanX = (window.innerWidth * (zoomLevel - 1)) / 1.5 + 40;
+      const maxPanY = (window.innerHeight * (zoomLevel - 1)) / 1.5 + 40;
+      setPan({
+        x: Math.max(-maxPanX, Math.min(maxPanX, nx)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, ny)),
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    isMouseDownRef.current = false;
+  };
+
+  // Zoom Helpers (for Desktop buttons & shortcuts)
   const zoomIn = () => {
-    setZoomLevel((prev) => Math.min(2.5, Math.round((prev + 0.25) * 100) / 100));
+    setZoomLevel((prev) => Math.min(3.5, Math.round((prev + 0.25) * 100) / 100));
   };
 
   const zoomOut = () => {
-    setZoomLevel((prev) => Math.max(0.8, Math.round((prev - 0.25) * 100) / 100));
+    setZoomLevel((prev) => {
+      const next = Math.max(1, Math.round((prev - 0.25) * 100) / 100);
+      if (next <= 1.05) setPan({ x: 0, y: 0 });
+      return next;
+    });
   };
 
   const resetZoom = () => {
     setZoomLevel(1);
+    setPan({ x: 0, y: 0 });
+    zoomLevelRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
   };
 
   const toggleFitWidth = () => {
-    setZoomLevel((prev) => (prev > 1.3 ? 1 : 1.6));
+    setZoomLevel((prev) => {
+      const next = prev > 1.2 ? 1 : 2.0;
+      if (next === 1) setPan({ x: 0, y: 0 });
+      return next;
+    });
   };
 
   // Canvas Click Handler: Distinguishes between Single Tap (toggle controls / flip) and Double Tap (zoom)
   const handleCanvasClick = (e: React.MouseEvent, clickX: number, width: number) => {
-    if (isFlipping) return;
+    if (isFlippingRef.current || touchMovedRef.current) {
+      touchMovedRef.current = false;
+      return;
+    }
     const now = Date.now();
     const isDouble = now - lastTapTime.current < 280;
     lastTapTime.current = now;
 
     if (isDouble) {
       if (tapTimeout.current) clearTimeout(tapTimeout.current);
-      setZoomLevel((prev) => (prev > 1.2 ? 1.0 : 1.6));
+      if (zoomLevelRef.current > 1.1) {
+        resetZoom();
+      } else {
+        setZoomLevel(2.0);
+      }
       return;
     }
 
     tapTimeout.current = setTimeout(() => {
-      if (viewMode === 'single' && zoomLevel <= 1.1) {
+      if (viewMode === 'single' && zoomLevelRef.current <= 1.1) {
         if (clickX < width * 0.2) {
           goToPrevPage();
         } else if (clickX > width * 0.8) {
@@ -591,12 +775,9 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
       {/* Reader Viewport Area */}
       <main
-        className={`fixed inset-0 z-20 flex flex-col overflow-auto transition-all duration-300 ${
+        className={`fixed inset-0 z-20 flex flex-col overflow-hidden transition-all duration-300 ${
           isControlsVisible ? 'pt-16 pb-20' : 'pt-0 pb-0'
         }`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         {loading && (
           <div className="flex h-full flex-col items-center justify-center gap-3">
@@ -636,14 +817,18 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                   handleCanvasClick(e, clickX, rect.width);
                 }}
               >
-                {/* Mode Lembar: 3D Realistic Paper Flipbook */}
+                {/* Mode Lembar: 3D Realistic Paper Flipbook with Pinch-to-Zoom & Pan */}
                 {viewMode === 'single' ? (
                   <div
-                    className="relative flex-1 flex items-center justify-center w-full h-full overflow-hidden p-1 sm:p-4"
+                    ref={stageRef}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    className="relative flex-1 flex items-center justify-center w-full h-full overflow-hidden p-1 sm:p-4 touch-none select-none"
                     style={{
                       perspective: '1400px',
-                      WebkitOverflowScrolling: 'touch',
-                      cursor: zoomLevel > 1.1 ? 'grab' : 'default',
+                      cursor: zoomLevel > 1.05 ? (isMouseDownRef.current ? 'grabbing' : 'grab') : 'default',
                     }}
                   >
                     {/* Navigation Hotspot Buttons (hidden on mobile, visible on desktop hover) */}
@@ -671,17 +856,18 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                       <ChevronRight className="h-6 w-6" />
                     </button>
 
-                    {/* Page Stage: 3D Layers */}
+                    {/* Page Stage: 3D Layers with Smooth GPU Transform Scale & Pan */}
                     <div
-                      className="relative flex items-center justify-center transition-all duration-200"
-                      style={
-                        zoomLevel > 1
-                          ? {
-                              width: `${zoomLevel * 100}%`,
-                              minWidth: `${zoomLevel * 100}%`,
-                            }
-                          : { width: '100%', height: '100%' }
-                      }
+                      className="relative flex items-center justify-center w-full h-full"
+                      style={{
+                        transform: `translate3d(${pan.x}px, ${pan.y}px, 0px) scale(${zoomLevel})`,
+                        transformOrigin: 'center center',
+                        transition:
+                          isPinchingRef.current || isPanningRef.current || isDragging || isMouseDownRef.current
+                            ? 'none'
+                            : 'transform 0.22s cubic-bezier(0.2, 0, 0, 1)',
+                        willChange: 'transform',
+                      }}
                     >
                       {/* UNDERNEATH PAGE: Revealed during 3D flip forward */}
                       {isFlipping && flipDirection === 'next' && currentPage + 1 < totalPages && (
@@ -690,7 +876,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                             <img
                               src={resolution.pageTemplateUrl!.replace('{page}', String(currentPage + 1))}
                               alt={`Halaman ${currentPage + 2}`}
-                              className={`rounded-md object-contain select-none ${
+                              className={`rounded-md object-contain select-none pointer-events-none ${
                                 isControlsVisible
                                   ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
                                   : 'max-h-[98vh] w-auto max-w-full'
@@ -707,7 +893,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                             <img
                               src={resolution.pageTemplateUrl!.replace('{page}', String(currentPage))}
                               alt={`Halaman ${currentPage + 1}`}
-                              className={`rounded-md object-contain select-none ${
+                              className={`rounded-md object-contain select-none pointer-events-none ${
                                 isControlsVisible
                                   ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
                                   : 'max-h-[98vh] w-auto max-w-full'
@@ -729,7 +915,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         style={{
                           transformOrigin: 'left center',
                           transform:
-                            isDragging && zoomLevel <= 1 && Math.abs(dragX) > 10
+                            isDragging && zoomLevel <= 1.05 && Math.abs(dragX) > 10
                               ? `perspective(1400px) rotateY(${dragAngle}deg)`
                               : undefined,
                           transition: isDragging ? 'none' : 'transform 0.25s ease',
@@ -758,20 +944,10 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                             alt={`Halaman ${currentPage + 1}`}
                             onLoad={() => setImageLoading(false)}
                             onError={() => setImageLoading(false)}
-                            style={
-                              zoomLevel > 1
-                                ? {
-                                    width: `${Math.min(zoomLevel * 100, 300)}%`,
-                                    maxWidth: 'none',
-                                  }
-                                : undefined
-                            }
-                            className={`rounded-md object-contain select-none transition-all duration-200 ${
+                            className={`rounded-md object-contain select-none pointer-events-none transition-all duration-200 ${
                               imageLoading ? 'opacity-30' : 'opacity-100'
                             } ${
-                              zoomLevel > 1
-                                ? 'h-auto max-w-none'
-                                : isControlsVisible
+                              isControlsVisible
                                 ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
                                 : 'max-h-[98vh] w-auto max-w-full'
                             }`}
@@ -779,7 +955,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                           />
 
                           {/* 3D Paper fold lighting/shadow overlay on turn */}
-                          {(isFlipping || (isDragging && Math.abs(dragX) > 10)) && (
+                          {(isFlipping || (isDragging && Math.abs(dragX) > 10)) && zoomLevel <= 1.05 && (
                             <div
                               className="absolute inset-0 pointer-events-none transition-opacity duration-200"
                               style={{
@@ -896,15 +1072,15 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         <ChevronRight className="h-5 w-5" />
                       </button>
 
-                      <div className="h-4 w-px bg-black/15 mx-0.5" />
+                      <div className="hidden sm:block h-4 w-px bg-black/15 mx-0.5" />
                     </>
                   )}
 
-                  {/* Zoom Controls */}
-                  <div className="flex items-center gap-1">
+                  {/* Zoom Controls (Desktop only - on mobile, pinch-to-zoom is used directly) */}
+                  <div className="hidden sm:flex items-center gap-1">
                     <button
                       onClick={zoomOut}
-                      disabled={zoomLevel <= 0.8}
+                      disabled={zoomLevel <= 1}
                       className="rounded-lg p-1 hover:bg-black/10 disabled:opacity-30 transition"
                       title="Perkecil Tulisan (-)"
                     >
@@ -921,7 +1097,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 
                     <button
                       onClick={zoomIn}
-                      disabled={zoomLevel >= 2.5}
+                      disabled={zoomLevel >= 3.5}
                       className="rounded-lg p-1 hover:bg-black/10 disabled:opacity-30 transition"
                       title="Perbesar Tulisan (+)"
                     >
@@ -938,6 +1114,21 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                       </button>
                     )}
                   </div>
+
+                  {/* Mobile Floating Reset Button (Appears only when zoomed in via 2-finger pinch) */}
+                  {zoomLevel > 1.15 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetZoom();
+                      }}
+                      className="sm:hidden flex items-center gap-1 rounded-lg bg-teal-600/90 px-2 py-1 text-[11px] font-bold text-white shadow-md active:scale-95 transition"
+                      title="Kembalikan ukuran normal"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Reset</span>
+                    </button>
+                  )}
 
                   {/* Direct PDF Download if available */}
                   {resolution.pdfUrl && (
