@@ -44,59 +44,63 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
 
   return (
     <div className="pb-12">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-[#1A1A1A] dark:text-white">Rak Buku Saya</h2>
-          <p className="text-xs text-stone-500 dark:text-slate-400">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold tracking-tight text-[#1A1A1A] dark:text-white">
+            Rak Buku Saya
+          </h2>
+          <p className="mt-0.5 text-xs text-stone-500 dark:text-slate-400 truncate">
             {user
-              ? `Tersimpan dan tersinkronisasi dengan akun Google (${user.email})`
-              : 'Tersimpan secara lokal di peramban ini'}
+              ? `Tersinkronisasi akun Google (${user.email})`
+              : 'Tersimpan lokal di perangkat ini'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 shrink-0">
           {user && onSyncLibrary && (
             <button
               type="button"
               onClick={onSyncLibrary}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/30 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/60 dark:bg-teal-950/40 px-3 py-1.5 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition disabled:opacity-50 cursor-pointer shadow-2xs"
               title="Sinkronkan dengan rak cloud"
             >
               <RotateCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan'}</span>
+              <span className="hidden sm:inline">{isSyncing ? 'Sinkron...' : 'Sinkronkan'}</span>
             </button>
           )}
 
           {savedBooks.length > 0 && activeFilter !== 'bookmarks' && (
             <button
+              type="button"
               onClick={onClearShelf}
-              className="flex items-center gap-1.5 rounded-lg border border-rose-200 dark:border-rose-900 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+              className="flex items-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-slate-800/80 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition shadow-2xs"
+              title="Kosongkan seluruh rak buku"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Kosongkan Rak</span>
+              <span className="hidden sm:inline">Kosongkan</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="mb-6 flex items-center gap-2 border-b border-[#E8E5DF] dark:border-slate-800 pb-3">
+      <div className="mb-6 flex items-center gap-2 overflow-x-auto no-scrollbar border-b border-[#E8E5DF] dark:border-slate-800 pb-3">
         <button
           onClick={() => setActiveFilter('all')}
-          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 ${
             activeFilter === 'all'
               ? 'bg-[#0D9488] text-white shadow-xs'
               : 'bg-white dark:bg-slate-800 border border-[#DCD8CE] dark:border-slate-700 text-stone-600 dark:text-slate-300 hover:bg-stone-50'
           }`}
         >
           <Bookmark className="h-3.5 w-3.5" />
-          <span>Semua Rak ({savedBooks.length})</span>
+          <span>Semua ({savedBooks.length})</span>
         </button>
 
         <button
           onClick={() => setActiveFilter('favorites')}
-          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 ${
             activeFilter === 'favorites'
               ? 'bg-rose-500 text-white shadow-xs'
               : 'bg-white dark:bg-slate-800 border border-[#DCD8CE] dark:border-slate-700 text-stone-600 dark:text-slate-300 hover:bg-stone-50'
@@ -108,14 +112,14 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
 
         <button
           onClick={() => setActiveFilter('bookmarks')}
-          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition whitespace-nowrap shrink-0 ${
             activeFilter === 'bookmarks'
               ? 'bg-amber-500 text-white shadow-xs'
               : 'bg-white dark:bg-slate-800 border border-[#DCD8CE] dark:border-slate-700 text-stone-600 dark:text-slate-300 hover:bg-stone-50'
           }`}
         >
           <BookOpen className="h-3.5 w-3.5" />
-          <span>Pembatas Halaman ({bookmarks.length})</span>
+          <span>Pembatas ({bookmarks.length})</span>
         </button>
       </div>
 

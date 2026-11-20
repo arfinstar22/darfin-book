@@ -65,13 +65,13 @@ export const BookCard: React.FC<BookCardProps> = ({
         <div className="relative mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl shadow-xs bg-[#F4EFEA] dark:bg-slate-900">
           <BookCoverVisual book={book} />
 
-          {/* Access Status Pill */}
-          <div className="absolute top-2 left-2 z-20">
+          {/* Access Status Pill - positioned at bottom-left to avoid collision with top-right actions */}
+          <div className="absolute bottom-2 left-2 z-20 max-w-[calc(100%-1rem)] pointer-events-none">
             <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold backdrop-blur-md shadow-xs ${badge.color}`}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold backdrop-blur-md shadow-xs truncate ${badge.color}`}
             >
-              <BadgeIcon className="h-3 w-3" />
-              <span>{badge.label}</span>
+              <BadgeIcon className="h-3 w-3 shrink-0" />
+              <span className="truncate">{badge.label}</span>
             </span>
           </div>
 
