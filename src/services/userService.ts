@@ -90,7 +90,9 @@ export class UserService {
       .update(`${header}.${payload}`)
       .digest('base64url');
 
-    if (signature !== expectedSig) {
+    const sigBuf = Buffer.from(signature);
+    const expectedBuf = Buffer.from(expectedSig);
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
       return null;
     }
 

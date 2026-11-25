@@ -83,6 +83,11 @@ export class ReaderResolverService {
         iaIdentifier = parts[1]?.split(/[?/#]/)[0];
       }
 
+      // Security: Validate iaIdentifier against path traversal or injection characters
+      if (iaIdentifier && !/^[a-zA-Z0-9_.\-]+$/.test(iaIdentifier)) {
+        iaIdentifier = undefined;
+      }
+
       if (iaIdentifier) {
         pageTemplateUrl = `https://archive.org/download/${iaIdentifier}/page/n{page}_w1200.jpg`;
         try {
@@ -95,11 +100,15 @@ export class ReaderResolverService {
             if (!totalPages && data.metadata?.pages) totalPages = parseInt(data.metadata.pages, 10);
 
             const scandataFile = data.files?.find(
-              (f: any) => f.format === 'Scandata' || f.name?.endsWith('_scandata.xml')
+              (f: any) =>
+                typeof f.name === 'string' &&
+                !f.name.includes('..') &&
+                !f.name.includes('/') &&
+                (f.format === 'Scandata' || f.name?.endsWith('_scandata.xml'))
             );
             if (!totalPages && scandataFile) {
               const scRes = await fetch(
-                `https://archive.org/download/${iaIdentifier}/${scandataFile.name}`,
+                `https://archive.org/download/${iaIdentifier}/${encodeURIComponent(scandataFile.name)}`,
                 {
                   headers: { Range: 'bytes=0-4096' },
                   signal: AbortSignal.timeout(2000),

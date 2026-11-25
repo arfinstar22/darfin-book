@@ -284,12 +284,31 @@ export class WikisourceProvider implements BookProvider {
     const data = (await res.json()) as { parse?: { text?: { '*': string } } };
     const rawHtml = data.parse?.text?.['*'] || '';
 
-    // Sanitize Wikisource header templates, navigation boxes, edit markers
+    // Sanitize Wikisource header templates, navigation boxes, edit markers, and active script vectors (XSS prevention)
+    return this.sanitizeHtml(rawHtml);
+  }
+
+  /**
+   * Defensive HTML sanitizer to neutralize Stored XSS vectors in scraped wiki content.
+   */
+  private sanitizeHtml(rawHtml: string): string {
     return rawHtml
       .replace(/<div id="headerContainer"[\s\S]*?<\/div>\s*<\/div>/gi, '')
       .replace(/<div class="[^"]*ws-noexport[^"]*"[\s\S]*?<\/div>/gi, '')
       .replace(/<span class="[^"]*mw-editsection[^"]*"[\s\S]*?<\/span>/gi, '')
-      .replace(/<table class="[^"]*headertemplate[^"]*"[\s\S]*?<\/table>/gi, '');
+      .replace(/<table class="[^"]*headertemplate[^"]*"[\s\S]*?<\/table>/gi, '')
+      // Strip active script, style, embed, object, iframe, and form tags
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+      .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+      .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+      .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '')
+      .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, '')
+      // Strip inline javascript handlers (on*, e.g. onload, onerror, onclick)
+      .replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      // Strip javascript: and data:text/html URIs in href and src
+      .replace(/(href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '$1="#"')
+      .replace(/(href|src)\s*=\s*(?:"data:text\/html[^"]*"|'data:text\/html[^']*')/gi, '$1="#"');
   }
 
   /**

@@ -16,3 +16,4 @@ android/build/
 *.apk
 *.aab
 .vitest/
+.snapgent/

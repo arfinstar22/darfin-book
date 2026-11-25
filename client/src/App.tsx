@@ -351,8 +351,13 @@ export const App: React.FC = () => {
   // Listen for direct token dispatch from Android MainActivity
   useEffect(() => {
     const handleAuthMessage = (e: MessageEvent) => {
-      if (e.data?.type === 'DARFIN_AUTH_TOKEN' && e.data?.token) {
-        applyAuthToken(e.data.token);
+      // Security check: only accept from same origin or direct window dispatch
+      if (e.origin && e.origin !== window.location.origin) return;
+      if (e.data?.type === 'DARFIN_AUTH_TOKEN' && typeof e.data?.token === 'string') {
+        const tokenStr = e.data.token.trim();
+        if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(tokenStr)) {
+          applyAuthToken(tokenStr);
+        }
       }
     };
     window.addEventListener('message', handleAuthMessage);

@@ -66,6 +66,14 @@ public class MainActivity extends BridgeActivity {
                     popupWebView.setWebViewClient(new WebViewClient() {
                         @Override
                         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                            if (request != null && request.getUrl() != null) {
+                                Uri u = request.getUrl();
+                                if ("darfinbook".equalsIgnoreCase(u.getScheme())) {
+                                    MainActivity.this.handleAuthIntent(new Intent(Intent.ACTION_VIEW, u));
+                                    popupDialog.dismiss();
+                                    return true;
+                                }
+                            }
                             return false;
                         }
                     });
@@ -107,14 +115,19 @@ public class MainActivity extends BridgeActivity {
         if ("darfinbook".equalsIgnoreCase(uri.getScheme())) {
             String token = uri.getQueryParameter("token");
             if (token != null && !token.isEmpty()) {
+                // Strict validation: must match valid JWT structure to prevent JS injection
+                if (!token.matches("^[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+$")) {
+                    return;
+                }
                 if (getBridge() != null && getBridge().getWebView() != null) {
                     getBridge().getWebView().postDelayed(() -> {
+                        String quotedToken = org.json.JSONObject.quote(token);
                         String js = "try { " +
-                            "localStorage.setItem('darfin_token', '" + token + "'); " +
-                            "window.postMessage({ type: 'DARFIN_AUTH_TOKEN', token: '" + token + "' }, '*'); " +
-                            "window.location.href = '/?auth_token=" + token + "'; " +
+                            "localStorage.setItem('darfin_token', " + quotedToken + "); " +
+                            "window.postMessage({ type: 'DARFIN_AUTH_TOKEN', token: " + quotedToken + " }, window.location.origin); " +
+                            "window.location.href = '/?auth_token=' + encodeURIComponent(" + quotedToken + "); " +
                             "} catch(e) { " +
-                            "window.location.href = 'https://darfin-book.onrender.com/?auth_token=" + token + "'; " +
+                            "window.location.href = 'https://darfin-book.onrender.com/?auth_token=' + encodeURIComponent(" + quotedToken + "); " +
                             "}";
                         getBridge().getWebView().evaluateJavascript(js, null);
                     }, 400);

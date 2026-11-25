@@ -1236,13 +1236,21 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                 ) : (
                   /* 4. Fullscreen Edge-to-Edge Embedded Frame (Fallback for external embed) */
                   <div className="relative flex-1 w-full h-full bg-black">
-                    <iframe
-                      src={resolution.launchUrl}
-                      title={book.title}
-                      className="h-full w-full border-0"
-                      allow="fullscreen; clipboard-write; encrypted-media"
-                      allowFullScreen
-                    />
+                    {resolution.launchUrl && /^(https?:\/\/)/i.test(resolution.launchUrl) ? (
+                      <iframe
+                        src={resolution.launchUrl}
+                        title={book.title}
+                        className="h-full w-full border-0"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                        allow="fullscreen; clipboard-write; encrypted-media"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full p-8 text-center text-white">
+                        <ShieldAlert className="h-12 w-12 text-amber-400 mb-3" />
+                        <p className="text-sm font-semibold">Tautan buku eksternal tidak valid atau tidak aman.</p>
+                      </div>
+                    )}
                   </div>
                 )
               )

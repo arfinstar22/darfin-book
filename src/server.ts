@@ -12,6 +12,40 @@ import { SearchService } from './services/search.js';
 import { validateIsbn } from './utils/isbn.js';
 import { UserService } from './services/userService.js';
 
+interface RateLimitBucket {
+  count: number;
+  resetAt: number;
+}
+const rateLimitStore = new Map<string, RateLimitBucket>();
+
+function checkRateLimit(ip: string, route: string, maxRequests: number, windowMs: number): boolean {
+  const key = `${ip}:${route}`;
+  const now = Date.now();
+  const bucket = rateLimitStore.get(key);
+
+  if (!bucket || now > bucket.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+
+  if (bucket.count >= maxRequests) {
+    return false;
+  }
+
+  bucket.count++;
+  return true;
+}
+
+// Clean up stale rate limit entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateLimitStore.entries()) {
+    if (now > bucket.resetAt) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 60000).unref();
+
 export async function buildServer() {
   const server = Fastify({
     logger: {
@@ -32,6 +66,40 @@ export async function buildServer() {
   await server.register(cors, {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+
+  // OWASP & Cloudflare Security Headers Hook
+  server.addHook('onSend', async (request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'SAMEORIGIN');
+    reply.header('X-XSS-Protection', '1; mode=block');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (env.NODE_ENV === 'production') {
+      reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+  });
+
+  // Rate Limiting Hook (DDoS & Brute Force mitigation)
+  server.addHook('onRequest', async (request, reply) => {
+    const ip = request.ip || '127.0.0.1';
+    const url = request.url;
+
+    if (url.startsWith('/api/v1/auth')) {
+      if (!checkRateLimit(ip, 'auth', 20, 60000)) {
+        reply.header('Retry-After', '60');
+        return reply.code(429).send({
+          error: 'Terlalu banyak permintaan autentikasi. Silakan tunggu 1 menit.',
+        });
+      }
+    } else if (url.startsWith('/api/v1/search')) {
+      if (!checkRateLimit(ip, 'search', 60, 60000)) {
+        reply.header('Retry-After', '60');
+        return reply.code(429).send({
+          error: 'Batas pencarian tercapai. Silakan coba kembali sesaat lagi.',
+        });
+      }
+    }
   });
 
   // Initialize database schema
@@ -185,12 +253,15 @@ export async function buildServer() {
       });
     }
 
-    const limit = query.limit ? Math.min(parseInt(query.limit, 10), 100) : 30;
-    const offset = query.offset ? parseInt(query.offset, 10) : 0;
+    const sanitizedQuery = query.q.trim().slice(0, 200);
+    const parsedLimit = parseInt(query.limit || '', 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 30;
+    const parsedOffset = parseInt(query.offset || '', 10);
+    const offset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
     const freeOnly = query.freeOnly === 'true';
 
     const results = await searchService.search({
-      query: query.q,
+      query: sanitizedQuery,
       limit,
       offset,
       freeOnly,
@@ -377,12 +448,13 @@ function renderAuthBridgeHtml(params: {
   user?: { displayName?: string; email?: string };
   error?: string;
 }): string {
-  const isSuccess = params.success && Boolean(params.token);
-  const token = params.token || '';
-  const appSchemeUrl = `darfinbook://auth?token=${encodeURIComponent(token)}`;
-  const intentUrl = `intent://auth?token=${encodeURIComponent(token)}#Intent;scheme=darfinbook;package=id.darfinbook.app;end`;
+  const isValidToken = Boolean(params.token) && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(params.token || '');
+  const isSuccess = params.success && isValidToken;
+  const token = isSuccess ? (params.token || '') : '';
+  const appSchemeUrl = isSuccess ? `darfinbook://auth?token=${encodeURIComponent(token)}` : 'darfinbook://auth?error=invalid_token';
+  const intentUrl = isSuccess ? `intent://auth?token=${encodeURIComponent(token)}#Intent;scheme=darfinbook;package=id.darfinbook.app;end` : '';
   const name = params.user?.displayName || params.user?.email || 'Pengguna';
-  const errorMsg = params.error || 'Autentikasi gagal';
+  const errorMsg = params.error || (!isValidToken && params.success ? 'Token otentikasi tidak valid' : 'Autentikasi gagal');
 
   return `<!DOCTYPE html>
 <html lang="id">
@@ -668,38 +740,93 @@ function renderAuthBridgeHtml(params: {
   server.post('/api/v1/auth/google', async (request, reply) => {
     const body = request.body as {
       credential?: string;
+      accessToken?: string;
       email?: string;
       name?: string;
       picture?: string;
       googleId?: string;
     };
 
-    let email = body?.email;
+    let email: string | undefined;
     let name = body?.name;
     let picture = body?.picture;
     let googleId = body?.googleId;
 
-    // Decode Google ID token if provided
+    // 1. Verify Google ID token via Google tokeninfo API if provided
     if (body?.credential) {
       try {
-        const parts = body.credential.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
-          if (payload.email) {
-            email = payload.email;
-            name = payload.name || name;
-            picture = payload.picture || picture;
-            googleId = payload.sub || googleId;
+        const tokenRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(body.credential)}`
+        );
+        if (tokenRes.ok) {
+          const info = (await tokenRes.json()) as {
+            email?: string;
+            email_verified?: string | boolean;
+            name?: string;
+            picture?: string;
+            sub?: string;
+            aud?: string;
+          };
+          const isEmailVerified = info.email_verified === 'true' || info.email_verified === true;
+          if (info.email && isEmailVerified) {
+            if (env.GOOGLE_CLIENT_ID && info.aud && info.aud !== env.GOOGLE_CLIENT_ID.trim()) {
+              return reply.code(401).send({
+                error: 'Token Google tidak cocok dengan identitas Client ID aplikasi',
+              });
+            }
+            email = info.email;
+            name = info.name || name;
+            picture = info.picture || picture;
+            googleId = info.sub || googleId;
           }
         }
       } catch (e) {
-        server.log.warn({ error: e }, 'Failed to parse Google credential token');
+        server.log.warn({ error: e }, 'Failed to verify Google ID token with tokeninfo');
       }
     }
 
+    // 2. Verify Google Access Token via Google userinfo API if provided
+    if (!email && body?.accessToken) {
+      try {
+        const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${body.accessToken}` },
+        });
+        if (profileRes.ok) {
+          const profile = (await profileRes.json()) as {
+            email?: string;
+            name?: string;
+            picture?: string;
+            sub?: string;
+          };
+          if (profile.email) {
+            email = profile.email;
+            name = profile.name || name;
+            picture = profile.picture || picture;
+            googleId = profile.sub || googleId;
+          }
+        }
+      } catch (e) {
+        server.log.warn({ error: e }, 'Failed to verify Google access token with userinfo');
+      }
+    }
+
+    // 3. Fallback check: in production, unverified email login is strictly forbidden
+    if (!email && body?.email) {
+      if (env.NODE_ENV === 'production') {
+        return reply.code(401).send({
+          error: 'Verifikasi identitas Google resmi diperlukan untuk masuk di lingkungan produksi.',
+        });
+      }
+      server.log.warn(
+        { email: body.email },
+        '[SECURITY WARNING] Allowing unverified direct email login strictly for local development'
+      );
+      email = body.email;
+    }
+
     if (!email) {
-      return reply.code(400).send({
-        error: 'Email Google wajib disertakan untuk masuk',
+      return reply.code(401).send({
+        error: 'Otentikasi Google tidak valid atau gagal diverifikasi.',
       });
     }
 
