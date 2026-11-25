@@ -1,6 +1,7 @@
 import { env } from '../config/env.js';
 import { cleanIsbn } from '../utils/isbn.js';
 import { normalizeLanguage } from '../utils/language.js';
+import { fetchWithTimeout } from '../utils/safeFetch.js';
 import type {
   AccessStatus,
   BookProvider,
@@ -66,9 +67,9 @@ export class OpenLibraryProvider implements BookProvider {
     url.searchParams.set('page', page.toString());
 
     try {
-      const response = await fetch(url.toString(), {
+      const response = await fetchWithTimeout(url.toString(), {
         headers: this.headers,
-      });
+      }, 4000);
 
       if (!response.ok) {
         return [];
@@ -147,7 +148,7 @@ export class OpenLibraryProvider implements BookProvider {
     const url = `https://openlibrary.org/isbn/${cleaned}.json`;
 
     try {
-      const response = await fetch(url, { headers: this.headers });
+      const response = await fetchWithTimeout(url, { headers: this.headers }, 3500);
       if (!response.ok) return null;
 
       const doc = (await response.json()) as Record<string, unknown>;
@@ -188,7 +189,7 @@ export class OpenLibraryProvider implements BookProvider {
   async getById(providerId: string): Promise<ProviderBook | null> {
     const url = `https://openlibrary.org/books/${providerId}.json`;
     try {
-      const response = await fetch(url, { headers: this.headers });
+      const response = await fetchWithTimeout(url, { headers: this.headers }, 3500);
       if (!response.ok) return null;
       const doc = (await response.json()) as Record<string, unknown>;
       const isbns = (doc.isbn_13 as string[]) || (doc.isbn_10 as string[]) || [];
@@ -271,7 +272,7 @@ export class OpenLibraryProvider implements BookProvider {
   private async resolveReadApiAccess(isbn: string): Promise<ProviderAccess> {
     const url = `https://openlibrary.org/api/volumes/brief/isbn/${isbn}.json`;
     try {
-      const response = await fetch(url, { headers: this.headers });
+      const response = await fetchWithTimeout(url, { headers: this.headers }, 3500);
       if (!response.ok) {
         return this.fallbackAccess();
       }

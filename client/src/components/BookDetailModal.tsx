@@ -11,7 +11,7 @@ import {
   Share2,
   Heart,
 } from 'lucide-react';
-import type { Book } from '../types.js';
+import { PROVIDER_LABELS, type Book } from '../types.js';
 import { getAccessBadge } from './BookCard.js';
 import { BookCoverVisual } from './BookCoverVisual.js';
 
@@ -99,7 +99,10 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
 
               {/* Provider Attribution Pill */}
               <div className="mt-3 text-center text-[11px] text-stone-500 dark:text-slate-400">
-                Penyedia data: <span className="font-semibold capitalize text-stone-700 dark:text-slate-200">{book.provider}</span>
+                Penyedia data:{' '}
+                <span className="font-semibold text-stone-700 dark:text-slate-200">
+                  {PROVIDER_LABELS[book.provider] || book.provider}
+                </span>
               </div>
             </div>
 

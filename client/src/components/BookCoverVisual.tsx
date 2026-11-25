@@ -89,9 +89,15 @@ export const BookCoverVisual: React.FC<BookCoverVisualProps> = ({
 
   const categoryLabel = isSchoolBook
     ? 'Buku Teks Pelajaran'
-    : book.provider === 'wikisource'
-    ? 'Sastra Nusantara'
-    : 'Koleksi Indonesia';
+    : book.provider === 'wikibooks'
+      ? 'Modul & Panduan'
+      : book.provider === 'brin' || book.provider === 'zenodo' || book.provider === 'openaire' || book.provider === 'repositori'
+        ? 'Pustaka Riset & Ilmu'
+        : book.provider === 'storyweaver' || book.provider === 'bloom'
+          ? 'Cerita Bergambar'
+          : book.provider === 'wikisource'
+            ? 'Sastra Nusantara'
+            : 'Koleksi Indonesia';
 
   return (
     <div

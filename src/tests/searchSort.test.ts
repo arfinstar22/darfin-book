@@ -71,5 +71,5 @@ describe('Catalog sorting and year filtering', () => {
     });
     expect(badRes.statusCode).toBe(200);
     expect(badRes.json().books.length).toBeGreaterThan(0);
-  });
+  }, 15000);
 });

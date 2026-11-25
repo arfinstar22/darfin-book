@@ -32,8 +32,37 @@ export interface ProviderAccess {
   canBookmark: boolean;
 }
 
+export type BookProviderName =
+  | 'openlibrary'
+  | 'googlebooks'
+  | 'wikisource'
+  | 'wikibooks'
+  | 'kemdikbud'
+  | 'internetarchive'
+  | 'storyweaver'
+  | 'bloom'
+  | 'brin'
+  | 'zenodo'
+  | 'repositori'
+  | 'openaire';
+
+export const PROVIDER_LABELS: Record<BookProviderName, string> = {
+  kemdikbud: 'SIBI Kemendikdasmen',
+  storyweaver: 'StoryWeaver (CC BY 4.0)',
+  bloom: 'Bloom Library Indonesia',
+  brin: 'Penerbit BRIN (Open Access)',
+  wikisource: 'Wikisumber Indonesia',
+  wikibooks: 'Wikibuku Indonesia',
+  internetarchive: 'Internet Archive',
+  openlibrary: 'Open Library',
+  repositori: 'Repositori Kemendikdasmen',
+  zenodo: 'Zenodo Open Access',
+  openaire: 'OpenAIRE / DOAB',
+  googlebooks: 'Google Buku',
+};
+
 export interface Book {
-  provider: 'openlibrary' | 'googlebooks' | 'wikisource' | 'kemdikbud' | 'internetarchive';
+  provider: BookProviderName;
   providerId: string;
   providerWorkId?: string;
   title: string;
@@ -112,13 +141,7 @@ export type BookSortOption =
   | 'title_asc'
   | 'title_desc';
 
-export type BookSourceFilter =
-  | 'all'
-  | 'openlibrary'
-  | 'googlebooks'
-  | 'wikisource'
-  | 'kemdikbud'
-  | 'internetarchive';
+export type BookSourceFilter = 'all' | BookProviderName;
 
 export interface CatalogFilterState {
   sort: BookSortOption;

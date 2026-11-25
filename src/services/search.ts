@@ -1,7 +1,12 @@
+import { BloomLibraryProvider } from '../providers/bloom.js';
+import { BrinProvider } from '../providers/brin.js';
 import { GoogleBooksProvider } from '../providers/googlebooks.js';
 import { InternetArchiveProvider } from '../providers/internetarchive.js';
 import { KemdikbudProvider } from '../providers/kemdikbud.js';
+import { OpenAireProvider } from '../providers/openaire.js';
 import { OpenLibraryProvider } from '../providers/openlibrary.js';
+import { RepositoriProvider } from '../providers/repositori.js';
+import { StoryWeaverProvider } from '../providers/storyweaver.js';
 import type {
   BookProvider,
   BookSearchQuery,
@@ -9,7 +14,9 @@ import type {
   BookSourceFilter,
   ProviderBook,
 } from '../providers/types.js';
+import { WikibooksProvider } from '../providers/wikibooks.js';
 import { WikisourceProvider } from '../providers/wikisource.js';
+import { ZenodoProvider } from '../providers/zenodo.js';
 import { validateIsbn } from '../utils/isbn.js';
 
 interface CachedSearchEntry {
@@ -85,8 +92,15 @@ export class SearchService {
   private openLibrary = new OpenLibraryProvider();
   private internetArchive = new InternetArchiveProvider();
   private wikisource = new WikisourceProvider();
+  private wikibooks = new WikibooksProvider();
   private googleBooks = new GoogleBooksProvider();
   private kemdikbud = new KemdikbudProvider();
+  private storyweaver = new StoryWeaverProvider();
+  private bloom = new BloomLibraryProvider();
+  private brin = new BrinProvider();
+  private zenodo = new ZenodoProvider();
+  private repositori = new RepositoriProvider();
+  private openaire = new OpenAireProvider();
 
   // ponytail: bounded 60-entry in-memory TTL cache cuts repeat provider latency; upgrade to Redis/SQLite if horizontal scaling is added
   private searchCache = new Map<string, CachedSearchEntry>();
@@ -98,6 +112,13 @@ export class SearchService {
       kemdikbud: this.kemdikbud,
       googlebooks: this.googleBooks,
       wikisource: this.wikisource,
+      wikibooks: this.wikibooks,
+      storyweaver: this.storyweaver,
+      bloom: this.bloom,
+      brin: this.brin,
+      zenodo: this.zenodo,
+      repositori: this.repositori,
+      openaire: this.openaire,
     };
   }
 
@@ -145,16 +166,34 @@ export class SearchService {
     // 2. Targeted or multi-provider parallel search
     const sourceFilter = query.source || 'all';
     const providersMap = this.getProviderMap();
+    const isWildcardPing = trimmed === '*' && (query.limit || 30) <= 5;
     const activeEntries: Array<[Exclude<BookSourceFilter, 'all'>, BookProvider]> =
       sourceFilter !== 'all' && providersMap[sourceFilter]
         ? [[sourceFilter, providersMap[sourceFilter]]]
-        : [
-            ['openlibrary', this.openLibrary],
-            ['internetarchive', this.internetArchive],
-            ['kemdikbud', this.kemdikbud],
-            ['googlebooks', this.googleBooks],
-            ['wikisource', this.wikisource],
-          ];
+        : isWildcardPing || query.fastMode
+          ? [
+              ['openlibrary', this.openLibrary],
+              ['internetarchive', this.internetArchive],
+              ['kemdikbud', this.kemdikbud],
+              ['storyweaver', this.storyweaver],
+              ['bloom', this.bloom],
+              ['brin', this.brin],
+              ['googlebooks', this.googleBooks],
+            ]
+          : [
+              ['openlibrary', this.openLibrary],
+              ['internetarchive', this.internetArchive],
+              ['kemdikbud', this.kemdikbud],
+              ['storyweaver', this.storyweaver],
+              ['bloom', this.bloom],
+              ['brin', this.brin],
+              ['wikibooks', this.wikibooks],
+              ['wikisource', this.wikisource],
+              ['zenodo', this.zenodo],
+              ['repositori', this.repositori],
+              ['openaire', this.openaire],
+              ['googlebooks', this.googleBooks],
+            ];
 
     const settled = await Promise.allSettled(
       activeEntries.map(([, provider]) => provider.search(query))
@@ -192,19 +231,33 @@ export class SearchService {
     const reqLimit = query.limit || 30;
     const ranIa = activeEntries.some(([key]) => key === 'internetarchive');
     const ranOl = activeEntries.some(([key]) => key === 'openlibrary');
+    const ranSw = activeEntries.some(([key]) => key === 'storyweaver');
+    const ranBloom = activeEntries.some(([key]) => key === 'bloom');
+    const ranBrin = activeEntries.some(([key]) => key === 'brin');
+    const ranKemdikbud = activeEntries.some(([key]) => key === 'kemdikbud');
 
-    const estimatedTotal =
-      sourceFilter === 'internetarchive'
-        ? this.internetArchive.lastTotalFound || sorted.length
-        : sourceFilter === 'openlibrary'
-          ? this.openLibrary.lastTotalFound || sorted.length
-          : sourceFilter !== 'all'
-            ? sorted.length
-            : Math.max(
-                sorted.length,
-                ranIa ? this.internetArchive.lastTotalFound || 0 : 0,
-                !query.freeOnly && ranOl ? this.openLibrary.lastTotalFound || 0 : 0
-              );
+    let estimatedTotal = sorted.length;
+    if (sourceFilter === 'internetarchive') {
+      estimatedTotal = this.internetArchive.lastTotalFound || sorted.length;
+    } else if (sourceFilter === 'openlibrary') {
+      estimatedTotal = this.openLibrary.lastTotalFound || sorted.length;
+    } else if (sourceFilter === 'storyweaver' && !hasYearFilter) {
+      estimatedTotal = this.storyweaver.lastTotalFound || sorted.length;
+    } else if (sourceFilter === 'all') {
+      const baseMain = Math.max(
+        sorted.length,
+        ranIa ? this.internetArchive.lastTotalFound || 0 : 0,
+        !query.freeOnly && ranOl ? this.openLibrary.lastTotalFound || 0 : 0
+      );
+      const extraCatalogs =
+        !hasYearFilter
+          ? (ranSw ? this.storyweaver.lastTotalFound : 0) +
+            (ranBloom ? this.bloom.lastTotalFound : 0) +
+            (ranBrin ? this.brin.lastTotalFound : 0) +
+            (ranKemdikbud ? this.kemdikbud.lastTotalFound : 0)
+          : 0;
+      estimatedTotal = baseMain + extraCatalogs;
+    }
 
     const result = {
       query: trimmed,
@@ -225,23 +278,21 @@ export class SearchService {
   }
 
   /**
-   * Search by ISBN with provider fallback.
+   * Search by ISBN with parallel provider lookup.
    */
   async searchByIsbn(isbn: string): Promise<ProviderBook[]> {
+    const settled = await Promise.allSettled([
+      this.kemdikbud.getByIsbn(isbn),
+      this.openLibrary.getByIsbn(isbn),
+      this.googleBooks.getByIsbn(isbn),
+    ]);
+
     const results: ProviderBook[] = [];
-
-    // Check Open Library first
-    const olBook = await this.openLibrary.getByIsbn(isbn);
-    if (olBook && olBook.isIndonesianVerified) {
-      results.push(olBook);
+    for (const item of settled) {
+      if (item.status === 'fulfilled' && item.value && item.value.isIndonesianVerified) {
+        results.push(item.value);
+      }
     }
-
-    // Check Google Books
-    const gbBook = await this.googleBooks.getByIsbn(isbn);
-    if (gbBook && gbBook.isIndonesianVerified) {
-      results.push(gbBook);
-    }
-
     return results;
   }
 

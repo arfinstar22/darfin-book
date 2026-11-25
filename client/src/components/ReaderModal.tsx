@@ -23,7 +23,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { resolveReader, getWikisourceContent } from '../api.js';
-import type { Book, ReaderResolution } from '../types.js';
+import { PROVIDER_LABELS, type Book, type ReaderResolution } from '../types.js';
 
 interface ReaderModalProps {
   book: Book;
@@ -1175,59 +1175,72 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                           rel="noreferrer noopener"
                           className="underline text-teal-600 font-semibold"
                         >
-                          Wikisumber Bahasa Indonesia
+                          {book.provider === 'wikibooks'
+                            ? 'Wikibuku Bahasa Indonesia'
+                            : 'Wikisumber Bahasa Indonesia'}
                         </a>
                       </p>
                     </footer>
                   </article>
                 </div>
               ) : (
-                /* 3. Official Kemendikdasmen Textbook View */
-                (book.provider === 'kemdikbud' ||
+                /* 3. Official External Reader / Direct PDF Card (Avoids blocked X-Frame-Options iframes and blank mobile PDF views) */
+                (['kemdikbud', 'brin', 'zenodo', 'repositori', 'openaire', 'storyweaver', 'bloom'].includes(book.provider) ||
                   resolution.launchUrl?.includes('kemendikdasmen.go.id') ||
                   resolution.launchUrl?.includes('kemdikbud.go.id')) ? (
                   <div className="mx-auto max-w-xl py-8 px-4 my-auto">
-                    <div className="overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center text-stone-900">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 border border-teal-200 text-teal-600 mb-4">
+                    <div className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 dark:bg-slate-900/90 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center text-stone-900 dark:text-slate-100">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 mb-4">
                         <BookOpen className="h-8 w-8" />
                       </div>
 
-                      <span className="inline-block rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-800">
-                        Buku Pelajaran Resmi Kurikulum Merdeka
+                      <span className="inline-block rounded-full bg-teal-100 dark:bg-teal-900/60 px-3 py-1 text-xs font-bold text-teal-800 dark:text-teal-200">
+                        {PROVIDER_LABELS[book.provider] || 'Akses Terbuka Resmi'}
                       </span>
 
-                      <h2 className="mt-3 text-lg font-bold sm:text-xl text-stone-900">
+                      <h2 className="mt-3 text-lg font-bold sm:text-xl text-stone-900 dark:text-white">
                         {book.title}
                       </h2>
-                      <p className="mt-1 text-xs text-stone-500">
-                        Penerbit: {book.publisher || 'Kementerian Pendidikan Dasar dan Menengah RI'}
+                      <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+                        Penerbit: {book.publisher || PROVIDER_LABELS[book.provider] || 'Sumber Terbuka Resmi'}
                       </p>
 
-                      <div className="mt-6 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-left text-xs text-amber-900 leading-relaxed">
-                        <p className="font-semibold mb-1">Akses Resmi & Aman SIBI Kemendikdasmen:</p>
-                        <p>
-                          Sesuai protokol keamanan portal pemerintah Kemendikdasmen RI, naskah resmi dan reader interaktif dapat dibaca secara resmi langsung melalui Sistem Informasi Perbukuan Indonesia (SIBI). Akses 100% gratis untuk seluruh siswa dan pendidik di Indonesia.
-                        </p>
+                      <div className="mt-6 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-4 text-left text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                        <p className="font-semibold mb-1">Akses Resmi &amp; Aman (100% Legal &amp; Gratis):</p>
+                        <p>{resolution.explanation}</p>
                       </div>
 
-                      <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-                        {resolution.launchUrl && (
+                      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                        {resolution.launchUrl && /^(https?:\/\/)/i.test(resolution.launchUrl) && (
                           <a
                             href={resolution.launchUrl}
                             target="_blank"
                             rel="noreferrer noopener"
                             className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-xs font-bold text-white hover:bg-teal-700 shadow-md shadow-teal-600/20 transition"
                           >
-                            <span>Buka Buku di Portal Resmi SIBI</span>
+                            <span>Buka &amp; Baca Naskah Resmi</span>
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         )}
+                        {resolution.pdfUrl &&
+                          resolution.pdfUrl !== resolution.launchUrl &&
+                          /^(https?:\/\/)/i.test(resolution.pdfUrl) && (
+                            <a
+                              href={resolution.pdfUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/50 px-5 py-3 text-xs font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition"
+                            >
+                              <Download className="h-4 w-4" />
+                              <span>Unduh PDF</span>
+                            </a>
+                          )}
                         <button
                           type="button"
                           onClick={handleBookmarkClick}
-                          className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs font-semibold hover:bg-stone-50 transition text-stone-800"
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-semibold hover:bg-stone-50 dark:hover:bg-slate-700 transition text-stone-800 dark:text-slate-100"
                         >
-                          <Bookmark className="h-4 w-4 text-teal-600" />
+                          <Bookmark className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                           <span>{bookmarkSavedToast ? 'Tersimpan ke Rak!' : 'Tandai Buku Ini'}</span>
                         </button>
                       </div>

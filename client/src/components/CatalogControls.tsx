@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowUpDown, Calendar, Database, RotateCcw } from 'lucide-react';
-import type { BookSortOption, BookSourceFilter, CatalogFilterState } from '../types.js';
+import { PROVIDER_LABELS, type BookProviderName, type BookSortOption, type BookSourceFilter, type CatalogFilterState } from '../types.js';
 import { DEFAULT_CATALOG_FILTER } from '../utils/bookSort.js';
 
 interface CatalogControlsProps {
@@ -175,11 +175,11 @@ export const CatalogControls: React.FC<CatalogControlsProps> = ({
               className={controlClass}
             >
               <option value="all">Sumber: Semua Katalog</option>
-              <option value="kemdikbud">Kemendikdasmen (Sekolah)</option>
-              <option value="internetarchive">Internet Archive</option>
-              <option value="openlibrary">Open Library</option>
-              <option value="wikisource">Wikisumber</option>
-              <option value="googlebooks">Google Buku</option>
+              {(Object.keys(PROVIDER_LABELS) as BookProviderName[]).map((key) => (
+                <option key={key} value={key}>
+                  {PROVIDER_LABELS[key]}
+                </option>
+              ))}
             </select>
           </div>
         )}

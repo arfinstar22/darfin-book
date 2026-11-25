@@ -67,3 +67,59 @@ export function normalizeLanguage(
     isEligibleForDefaultCatalog: false,
   };
 }
+
+const ID_LEXICAL_MARKERS = new Set([
+  'dan', 'yang', 'untuk', 'dalam', 'pada', 'dari', 'dengan', 'di', 'ke', 'oleh',
+  'tentang', 'sebagai', 'buku', 'kajian', 'panduan', 'pedoman', 'pembelajaran',
+  'pendidikan', 'masyarakat', 'indonesia', 'nusantara', 'bahasa', 'serta', 'atau',
+  'terhadap', 'analisis', 'pengembangan', 'cerita', 'sastra', 'sejarah', 'kelas',
+]);
+
+const EN_LEXICAL_MARKERS = new Set([
+  'the', 'and', 'of', 'with', 'for', 'in', 'on', 'from', 'an', 'this', 'that',
+  'study', 'perspective', 'perspectives', 'toward', 'towards', 'handbook', 'analysis',
+]);
+
+/**
+ * Verifies Indonesian eligibility including content-level fallback when institutional
+ * repositories mis-tag Indonesian works as 'eng' or leave language metadata blank.
+ */
+export function verifyIndonesianContent(params: {
+  rawLanguage?: string | null;
+  title?: string;
+  description?: string;
+  provider?: string;
+}): NormalizedLanguage {
+  const direct = normalizeLanguage(params.rawLanguage, { provider: params.provider });
+  if (direct.isEligibleForDefaultCatalog) {
+    return direct;
+  }
+
+  const raw = (params.rawLanguage || '').trim().toLowerCase();
+  const ambiguous = !raw || raw === 'eng' || raw === 'en' || raw === 'und' || raw === 'unknown';
+  if (!ambiguous) {
+    return direct;
+  }
+
+  const sampleText = `${params.title || ''} ${(params.description || '').slice(0, 400)}`.toLowerCase();
+  const words = sampleText.match(/[a-z]{2,}/g) || [];
+  let idHits = 0;
+  let enHits = 0;
+
+  for (const w of words) {
+    if (ID_LEXICAL_MARKERS.has(w)) idHits++;
+    if (EN_LEXICAL_MARKERS.has(w)) enHits++;
+  }
+
+  if ((idHits >= 2 && idHits > enHits) || (!raw && idHits >= 1 && enHits === 0)) {
+    return {
+      languageCode: 'id',
+      languageTag: 'id-ID',
+      providerLanguageCode: params.rawLanguage || 'inferred-id',
+      verification: 'VERIFIED',
+      isEligibleForDefaultCatalog: true,
+    };
+  }
+
+  return direct;
+}

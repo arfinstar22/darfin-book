@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { fetchWithTimeout } from '../utils/safeFetch.js';
 import type {
   BookProvider,
   BookSearchQuery,
@@ -63,7 +64,7 @@ export class InternetArchiveProvider implements BookProvider {
     url.searchParams.set('output', 'json');
 
     try {
-      const response = await fetch(url.toString(), { headers: this.headers });
+      const response = await fetchWithTimeout(url.toString(), { headers: this.headers }, 4000);
       if (!response.ok) return [];
 
       const data = (await response.json()) as {

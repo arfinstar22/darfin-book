@@ -6,6 +6,7 @@ import path from 'path';
 import { env } from './config/env.js';
 import { initDb } from './db/index.js';
 import type { BookSortOption, BookSourceFilter, ProviderBook } from './providers/types.js';
+import { WikibooksProvider } from './providers/wikibooks.js';
 import { WikisourceProvider } from './providers/wikisource.js';
 import { ReaderResolverService } from './services/readerResolver.js';
 import { SearchService } from './services/search.js';
@@ -108,6 +109,7 @@ export async function buildServer() {
   const searchService = new SearchService();
   const readerResolver = new ReaderResolverService();
   const wikisource = new WikisourceProvider();
+  const wikibooks = new WikibooksProvider();
   const userService = new UserService();
 
   // Basic Health check
@@ -252,8 +254,15 @@ export async function buildServer() {
     'openlibrary',
     'googlebooks',
     'wikisource',
+    'wikibooks',
     'kemdikbud',
     'internetarchive',
+    'storyweaver',
+    'bloom',
+    'brin',
+    'zenodo',
+    'repositori',
+    'openaire',
   ]);
 
   const parseBoundedYear = (raw?: string): number | undefined => {
@@ -333,13 +342,13 @@ export async function buildServer() {
     try {
       const [novelTere, novelPidi, novelAndrea, textbooks, classics, science, history] =
         await Promise.all([
-          searchService.search({ query: 'Tere Liye', limit: 4, freeOnly: false }),
-          searchService.search({ query: 'Pidi Baiq Dilan', limit: 4, freeOnly: false }),
-          searchService.search({ query: 'Laskar Pelangi Andrea Hirata', limit: 2, freeOnly: false }),
-          searchService.search({ query: 'pelajaran', limit: 8, freeOnly: true }),
-          searchService.search({ query: 'cerita', limit: 8, freeOnly: true }),
-          searchService.search({ query: 'matematika', limit: 8, freeOnly: true }),
-          searchService.search({ query: 'sejarah', limit: 8, freeOnly: true }),
+          searchService.search({ query: 'Tere Liye', limit: 4, freeOnly: false, fastMode: true }),
+          searchService.search({ query: 'Pidi Baiq Dilan', limit: 4, freeOnly: false, fastMode: true }),
+          searchService.search({ query: 'Laskar Pelangi Andrea Hirata', limit: 2, freeOnly: false, fastMode: true }),
+          searchService.search({ query: 'pelajaran', limit: 8, freeOnly: true, fastMode: true }),
+          searchService.search({ query: 'cerita', limit: 8, freeOnly: true, fastMode: true }),
+          searchService.search({ query: 'matematika', limit: 8, freeOnly: true, fastMode: true }),
+          searchService.search({ query: 'sejarah', limit: 8, freeOnly: true, fastMode: true }),
         ]);
 
       // Interleave novel authors so Tere Liye, Pidi Baiq, and Andrea Hirata are evenly distributed
@@ -452,6 +461,20 @@ export async function buildServer() {
     if (!content) {
       return reply.code(404).send({
         error: 'Konten naskah Wikisumber tidak ditemukan atau gagal dimuat.',
+      });
+    }
+
+    return content;
+  });
+
+  // Direct Wikibooks reading content
+  server.get('/api/v1/wikibooks/content/:pageId', async (request, reply) => {
+    const params = request.params as { pageId: string };
+    const content = await wikibooks.getPageContent(params.pageId);
+
+    if (!content) {
+      return reply.code(404).send({
+        error: 'Konten buku Wikibuku tidak ditemukan atau gagal dimuat.',
       });
     }
 

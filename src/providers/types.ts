@@ -37,8 +37,22 @@ export interface ProviderAccess {
   expiresAt?: string;
 }
 
+export type BookProviderName =
+  | 'openlibrary'
+  | 'googlebooks'
+  | 'wikisource'
+  | 'wikibooks'
+  | 'kemdikbud'
+  | 'internetarchive'
+  | 'storyweaver'
+  | 'bloom'
+  | 'brin'
+  | 'zenodo'
+  | 'repositori'
+  | 'openaire';
+
 export interface ProviderBook {
-  provider: 'openlibrary' | 'googlebooks' | 'wikisource' | 'kemdikbud' | 'internetarchive';
+  provider: BookProviderName;
   providerId: string;
   providerWorkId?: string;
   title: string;
@@ -69,13 +83,7 @@ export type BookSortOption =
   | 'title_asc'
   | 'title_desc';
 
-export type BookSourceFilter =
-  | 'all'
-  | 'openlibrary'
-  | 'googlebooks'
-  | 'wikisource'
-  | 'kemdikbud'
-  | 'internetarchive';
+export type BookSourceFilter = 'all' | BookProviderName;
 
 export interface BookSearchQuery {
   query: string;
@@ -88,6 +96,7 @@ export interface BookSearchQuery {
   yearFrom?: number;
   yearTo?: number;
   source?: BookSourceFilter;
+  fastMode?: boolean;
 }
 
 export interface BookProvider {

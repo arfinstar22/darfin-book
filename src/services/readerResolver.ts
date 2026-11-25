@@ -3,6 +3,7 @@ import type {
   ProviderBook,
   ReaderMode,
 } from '../providers/types.js';
+import { WikibooksProvider } from '../providers/wikibooks.js';
 import { WikisourceProvider } from '../providers/wikisource.js';
 
 export interface ReaderResolution {
@@ -23,6 +24,7 @@ export interface ReaderResolution {
 
 export class ReaderResolverService {
   private wikisource = new WikisourceProvider();
+  private wikibooks = new WikibooksProvider();
 
   /**
    * Resolve appropriate reader experience based on provider signals and legal permissions.
@@ -33,17 +35,20 @@ export class ReaderResolverService {
   ): Promise<ReaderResolution> {
     const access = book.access;
 
-    // 1. Wikisource Texts: Render in-app with sanitized text and license attribution
-    if (book.provider === 'wikisource') {
-      const pageData = await this.wikisource.getPageContent(book.providerId);
+    // 1. Wikisource & Wikibooks Texts: Render in-app with sanitized text and license attribution
+    if (book.provider === 'wikisource' || book.provider === 'wikibooks') {
+      const wikiProvider = book.provider === 'wikibooks' ? this.wikibooks : this.wikisource;
+      const pageData = await wikiProvider.getPageContent(book.providerId);
+      const isWikibooks = book.provider === 'wikibooks';
       return {
         mode: 'WIKISOURCE_TEXT',
         accessStatus: 'FULL_ACCESS',
-        sourceProvider: 'wikisource',
+        sourceProvider: book.provider,
         launchUrl: book.sourceUrl,
         contentHtml: pageData?.html,
-        explanation:
-          'Karya domain publik / lisensi terbuka dari Wikisumber Bahasa Indonesia.',
+        explanation: isWikibooks
+          ? 'Buku pembelajaran terbuka (CC BY-SA) dari Wikibuku Bahasa Indonesia.'
+          : 'Karya domain publik / lisensi terbuka dari Wikisumber Bahasa Indonesia.',
         licenseNotice:
           pageData?.licenseNotice ||
           'Teks tersedia di bawah Lisensi Creative Commons Attribution-ShareAlike atau Domain Publik.',
@@ -149,7 +154,7 @@ export class ReaderResolverService {
         canDownload: access.canDownload,
         iaIdentifier,
         totalPages,
-        pdfUrl,
+        pdfUrl: pdfUrl || access.downloadUrl,
         pageTemplateUrl,
       };
     }

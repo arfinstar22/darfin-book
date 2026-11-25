@@ -1,6 +1,7 @@
 import { env } from '../config/env.js';
 import { cleanIsbn } from '../utils/isbn.js';
 import { normalizeLanguage } from '../utils/language.js';
+import { fetchWithTimeout } from '../utils/safeFetch.js';
 import type {
   AccessStatus,
   BookProvider,
@@ -43,7 +44,7 @@ export class GoogleBooksProvider implements BookProvider {
     }
 
     try {
-      const response = await fetch(url.toString());
+      const response = await fetchWithTimeout(url.toString(), {}, 3800);
       if (response.status === 429) {
         // Shared daily quota exceeded - graceful fallback
         return [];
@@ -148,7 +149,7 @@ export class GoogleBooksProvider implements BookProvider {
     }
 
     try {
-      const response = await fetch(url.toString());
+      const response = await fetchWithTimeout(url.toString(), {}, 3800);
       if (!response.ok) return null;
 
       const item = (await response.json()) as Record<string, unknown>;
