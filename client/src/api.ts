@@ -1,5 +1,14 @@
 import { Capacitor } from '@capacitor/core';
-import type { Book, CuratedShelf, ReaderResolution, UserProfile, BookmarkItem, ReadingProgressItem } from './types.js';
+import type {
+  Book,
+  BookSortOption,
+  BookSourceFilter,
+  CuratedShelf,
+  ReaderResolution,
+  UserProfile,
+  BookmarkItem,
+  ReadingProgressItem,
+} from './types.js';
 
 export const API_BASE =
   typeof window !== 'undefined' &&
@@ -210,11 +219,19 @@ export interface SearchResultResponse {
   total: number;
 }
 
+export interface SearchBookOptions {
+  sort?: BookSortOption;
+  yearFrom?: number;
+  yearTo?: number;
+  source?: BookSourceFilter;
+}
+
 export async function searchBooks(
   query: string,
   freeOnly = false,
   limit = 30,
-  offset = 0
+  offset = 0,
+  options?: SearchBookOptions
 ): Promise<SearchResultResponse> {
   const url = new URL(`${API_BASE}/search`, window.location.origin);
   url.searchParams.set('q', query);
@@ -223,6 +240,18 @@ export async function searchBooks(
   }
   url.searchParams.set('limit', limit.toString());
   url.searchParams.set('offset', offset.toString());
+  if (options?.sort && options.sort !== 'relevance') {
+    url.searchParams.set('sort', options.sort);
+  }
+  if (options?.yearFrom !== undefined) {
+    url.searchParams.set('yearFrom', String(options.yearFrom));
+  }
+  if (options?.yearTo !== undefined) {
+    url.searchParams.set('yearTo', String(options.yearTo));
+  }
+  if (options?.source && options.source !== 'all') {
+    url.searchParams.set('source', options.source);
+  }
 
   const res = await fetch(url.toString());
   if (!res.ok) {

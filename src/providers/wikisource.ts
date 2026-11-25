@@ -30,6 +30,13 @@ export class WikisourceProvider implements BookProvider {
     url.searchParams.set('srnamespace', '0|102'); // Main namespace & Index namespace (books)
     url.searchParams.set('srlimit', limit.toString());
     url.searchParams.set('sroffset', offset.toString());
+    if (query.sort === 'newest') {
+      url.searchParams.set('srsort', 'create_timestamp_desc');
+    } else if (query.sort === 'oldest') {
+      url.searchParams.set('srsort', 'create_timestamp_asc');
+    } else if (query.sort === 'popular') {
+      url.searchParams.set('srsort', 'incoming_links_desc');
+    }
     url.searchParams.set('format', 'json');
 
     try {

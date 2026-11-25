@@ -28,14 +28,24 @@ export class OpenLibraryProvider implements BookProvider {
     const offset = query.offset ?? 0;
     const page = Math.floor(offset / limit) + 1;
 
-    // Build search query with Indonesian language preference/restriction
-    let searchParam = query.query.trim();
+    // Build search query with Indonesian language preference/restriction and safe year bounds
+    let searchParam = query.query.replace(/[[\]{}]/g, ' ').trim();
     if (searchParam === '*' || searchParam.toLowerCase() === 'all' || searchParam.toLowerCase() === 'semua') {
       searchParam = '';
     }
+    const parts: string[] = [];
     if (env.STRICT_INDONESIAN_CATALOG) {
-      searchParam = searchParam ? `language:ind ${searchParam}` : `language:ind`;
+      parts.push('language:ind');
     }
+    if (searchParam) {
+      parts.push(searchParam);
+    }
+    if (query.yearFrom !== undefined || query.yearTo !== undefined) {
+      const yFrom = Number.isInteger(query.yearFrom) ? (query.yearFrom as number) : 1000;
+      const yTo = Number.isInteger(query.yearTo) ? (query.yearTo as number) : 2099;
+      parts.push(`first_publish_year:[${yFrom} TO ${yTo}]`);
+    }
+    searchParam = parts.join(' ');
 
     const url = new URL('https://openlibrary.org/search.json');
     url.searchParams.set('q', searchParam);
@@ -43,6 +53,15 @@ export class OpenLibraryProvider implements BookProvider {
       'fields',
       'key,title,author_name,first_publish_year,cover_i,isbn,edition_count,language,subject,edition_key,ebook_access,has_fulltext,ia'
     );
+    const olSortMap: Record<string, string | undefined> = {
+      newest: 'new',
+      oldest: 'old',
+      popular: 'editions',
+    };
+    const olSort = query.sort ? olSortMap[query.sort] : undefined;
+    if (olSort) {
+      url.searchParams.set('sort', olSort);
+    }
     url.searchParams.set('limit', limit.toString());
     url.searchParams.set('page', page.toString());
 

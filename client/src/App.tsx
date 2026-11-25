@@ -24,6 +24,7 @@ import { AccountView } from './components/AccountView.js';
 import { BookCard } from './components/BookCard.js';
 import { BookDetailModal } from './components/BookDetailModal.js';
 import { BottomNav, type NavTab } from './components/BottomNav.js';
+import { CatalogControls } from './components/CatalogControls.js';
 import { ExploreView } from './components/ExploreView.js';
 import { HomeView } from './components/HomeView.js';
 import { LoginModal } from './components/LoginModal.js';
@@ -32,7 +33,8 @@ import { ReaderModal } from './components/ReaderModal.js';
 import { ShelfView } from './components/ShelfView.js';
 import { ConfirmDialog } from './components/ConfirmDialog.js';
 import { Toast, type ToastMessage } from './components/Toast.js';
-import type { Book, CuratedShelf, UserProfile, BookmarkItem } from './types.js';
+import type { Book, CatalogFilterState, CuratedShelf, UserProfile, BookmarkItem } from './types.js';
+import { DEFAULT_CATALOG_FILTER } from './utils/bookSort.js';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
@@ -40,6 +42,8 @@ export const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Book[] | null>(null);
+  const [searchTotal, setSearchTotal] = useState<number>(0);
+  const [searchFilterState, setSearchFilterState] = useState<CatalogFilterState>(DEFAULT_CATALOG_FILTER);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [freeOnly, setFreeOnly] = useState(false);
   const [catalogCount, setCatalogCount] = useState<number>(136920);
@@ -414,7 +418,11 @@ export const App: React.FC = () => {
   }, []);
 
   // Handle Search Submission
-  const handleSearch = async (queryText: string, onlyFree = freeOnly) => {
+  const handleSearch = async (
+    queryText: string,
+    onlyFree = freeOnly,
+    nextFilter: CatalogFilterState = searchFilterState
+  ) => {
     const q = queryText.trim();
     if (!q) {
       setSearchResults(null);
@@ -428,11 +436,13 @@ export const App: React.FC = () => {
     setCurrentTab('home');
 
     try {
-      const { books } = await searchBooks(q, onlyFree);
+      const { books, total } = await searchBooks(q, onlyFree, 30, 0, nextFilter);
       setSearchResults(books);
+      setSearchTotal(total);
     } catch (err: unknown) {
       setSearchError((err as Error).message || 'Terjadi kesalahan saat mencari');
       setSearchResults([]);
+      setSearchTotal(0);
     } finally {
       setIsSearching(false);
     }
@@ -711,14 +721,18 @@ export const App: React.FC = () => {
 
             {/* Search Results Display (Only active when search query is not empty and results exist) */}
             {!isSearching && searchResults !== null && searchQuery.trim() !== '' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-[#E8E5DF] dark:border-slate-800 pb-3">
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8E5DF] dark:border-slate-800 pb-3">
                   <div>
                     <h2 className="text-lg font-bold text-[#1A1A1A] dark:text-white">
                       Hasil Pencarian: &ldquo;{searchQuery}&rdquo;
                     </h2>
                     <p className="text-xs text-stone-500 dark:text-slate-400">
-                      Ditemukan {searchResults.length} buku terverifikasi bahasa Indonesia
+                      Menampilkan {searchResults.length}
+                      {searchTotal > searchResults.length
+                        ? ` dari ${searchTotal.toLocaleString('id-ID')}`
+                        : ''}{' '}
+                      buku terverifikasi bahasa Indonesia
                     </p>
                   </div>
 
@@ -727,12 +741,22 @@ export const App: React.FC = () => {
                     onClick={() => {
                       setSearchResults(null);
                       setSearchQuery('');
+                      setSearchFilterState(DEFAULT_CATALOG_FILTER);
                     }}
-                    className="flex items-center gap-1 text-xs font-bold text-[#0D9488] dark:text-teal-400 hover:underline cursor-pointer"
+                    className="flex items-center gap-1 min-h-[44px] px-2 text-xs font-bold text-[#0D9488] dark:text-teal-400 hover:underline cursor-pointer"
                   >
                     <span>✕ Tutup Pencarian &amp; Kembali ke Beranda</span>
                   </button>
                 </div>
+
+                {/* Search Results Sort & Year Filter Bar */}
+                <CatalogControls
+                  value={searchFilterState}
+                  onChange={(next) => {
+                    setSearchFilterState(next);
+                    handleSearch(searchQuery, freeOnly, next);
+                  }}
+                />
 
                 {searchResults.length === 0 ? (
                   <div className="flex min-h-[30vh] flex-col items-center justify-center p-8 text-center">

@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { searchBooks } from '../api.js';
 import { BookCard } from './BookCard.js';
-import { formatCatalogCount, type Book } from '../types.js';
+import { CatalogControls } from './CatalogControls.js';
+import { formatCatalogCount, type Book, type CatalogFilterState } from '../types.js';
+import { DEFAULT_CATALOG_FILTER } from '../utils/bookSort.js';
 
 interface ExploreViewProps {
   initialCategory?: string;
@@ -117,10 +119,11 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [filterFreeOnly, setFilterFreeOnly] = useState<boolean>(false);
   const [searchFilter, setSearchFilter] = useState<string>('');
+  const [filterState, setFilterState] = useState<CatalogFilterState>(DEFAULT_CATALOG_FILTER);
 
   const formattedCount = formatCatalogCount(totalCatalogCount);
 
-  // Fetch initial books whenever category or free filter changes
+  // Fetch initial books whenever category, free filter, sort, or year/source filter changes
   useEffect(() => {
     let isMounted = true;
     const cat = BASE_CATEGORIES.find((c) => c.id === activeCategory) || BASE_CATEGORIES[0];
@@ -133,11 +136,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 
       try {
         const queryToFetch = searchFilter.trim() || cat.query;
-        const res = await searchBooks(queryToFetch, filterFreeOnly, 30, 0);
+        const res = await searchBooks(queryToFetch, filterFreeOnly, 30, 0, filterState);
         if (isMounted) {
           setBooks(res.books);
-          setTotalCatalogCount(res.total || propCatalogCount);
-          setHasMore(res.books.length >= 20 && res.books.length < (res.total || propCatalogCount));
+          const resolvedTotal = typeof res.total === 'number' ? res.total : propCatalogCount;
+          setTotalCatalogCount(resolvedTotal);
+          setHasMore(res.books.length >= 20 && res.books.length < resolvedTotal);
         }
       } catch (err: unknown) {
         if (isMounted) {
@@ -155,7 +159,15 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeCategory, filterFreeOnly, propCatalogCount]);
+  }, [
+    activeCategory,
+    filterFreeOnly,
+    propCatalogCount,
+    filterState.sort,
+    filterState.yearFrom,
+    filterState.yearTo,
+    filterState.source,
+  ]);
 
   // Handle server-side pagination for "Muat Lebih Banyak"
   const handleLoadMore = async () => {
@@ -165,7 +177,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     try {
       const cat = BASE_CATEGORIES.find((c) => c.id === activeCategory) || BASE_CATEGORIES[0];
       const queryToFetch = searchFilter.trim() || cat.query;
-      const res = await searchBooks(queryToFetch, filterFreeOnly, 30, books.length);
+      const res = await searchBooks(queryToFetch, filterFreeOnly, 30, books.length, filterState);
 
       if (!res.books || res.books.length === 0) {
         setHasMore(false);
@@ -191,7 +203,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const handleInViewSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchFilter.trim();
-    const cat = CATEGORIES.find((c) => c.id === activeCategory) || CATEGORIES[0];
+    const cat = BASE_CATEGORIES.find((c) => c.id === activeCategory) || BASE_CATEGORIES[0];
     const queryToFetch = q || cat.query;
 
     setIsLoading(true);
@@ -200,10 +212,11 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     setHasMore(true);
 
     try {
-      const res = await searchBooks(queryToFetch, filterFreeOnly, 30, 0);
+      const res = await searchBooks(queryToFetch, filterFreeOnly, 30, 0, filterState);
       setBooks(res.books);
-      setTotalCatalogCount(res.total || res.books.length);
-      setHasMore(res.books.length >= 20 && res.books.length < (res.total || 30607));
+      const resolvedTotal = typeof res.total === 'number' ? res.total : res.books.length;
+      setTotalCatalogCount(resolvedTotal);
+      setHasMore(res.books.length >= 20 && res.books.length < resolvedTotal);
     } catch (err: unknown) {
       setError((err as Error).message || 'Gagal mencari buku');
     } finally {
@@ -309,6 +322,9 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           <span>Akses Penuh Bebas</span>
         </button>
       </div>
+
+      {/* Sort, Year & Source Filter Bar */}
+      <CatalogControls value={filterState} onChange={setFilterState} />
 
       {/* Catalog Status Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-stone-500 dark:text-slate-400">

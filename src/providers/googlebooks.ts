@@ -28,6 +28,12 @@ export class GoogleBooksProvider implements BookProvider {
     url.searchParams.set('maxResults', Math.min(limit, 40).toString());
     url.searchParams.set('startIndex', offset.toString());
 
+    if (query.sort === 'newest') {
+      url.searchParams.set('orderBy', 'newest');
+    } else {
+      url.searchParams.set('orderBy', 'relevance');
+    }
+
     if (query.freeOnly) {
       url.searchParams.set('filter', 'free-ebooks');
     }
@@ -80,6 +86,16 @@ export class GoogleBooksProvider implements BookProvider {
           imageLinks?.thumbnail?.replace('http://', 'https://') ||
           imageLinks?.smallThumbnail?.replace('http://', 'https://');
 
+        const rawPublishedDate = volumeInfo.publishedDate as string | undefined;
+        const parsedYearMatch = rawPublishedDate?.match(/^(\d{4})/);
+        const publishedYear = parsedYearMatch ? parseInt(parsedYearMatch[1], 10) : undefined;
+
+        if (query.yearFrom !== undefined || query.yearTo !== undefined) {
+          if (!publishedYear) continue;
+          if (query.yearFrom !== undefined && publishedYear < query.yearFrom) continue;
+          if (query.yearTo !== undefined && publishedYear > query.yearTo) continue;
+        }
+
         results.push({
           provider: 'googlebooks',
           providerId: item.id as string,
@@ -88,7 +104,8 @@ export class GoogleBooksProvider implements BookProvider {
           authors: (volumeInfo.authors as string[]) || ['Penulis Tidak Diketahui'],
           description: volumeInfo.description as string | undefined,
           publisher: volumeInfo.publisher as string | undefined,
-          publishedDate: volumeInfo.publishedDate as string | undefined,
+          publishedYear,
+          publishedDate: rawPublishedDate,
           language: lang,
           languageCode: normalizedLang.languageCode,
           isIndonesianVerified: normalizedLang.isEligibleForDefaultCatalog,

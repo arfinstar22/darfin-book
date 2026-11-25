@@ -23,8 +23,8 @@ export class InternetArchiveProvider implements BookProvider {
     const offset = query.offset ?? 0;
     const page = Math.floor(offset / limit) + 1;
 
-    // Sanitize query for Lucene syntax
-    const cleanQ = query.query.replace(/[:"()]/g, ' ').trim();
+    // Sanitize query for Lucene syntax to prevent query operator/range injection
+    const cleanQ = query.query.replace(/[:"()[\]{}]/g, ' ').trim();
     const isBroad =
       !cleanQ ||
       cleanQ === '*' ||
@@ -32,14 +32,32 @@ export class InternetArchiveProvider implements BookProvider {
       cleanQ.toLowerCase() === 'semua' ||
       cleanQ.toLowerCase() === 'indonesia';
 
-    const searchQuery = isBroad
+    const baseQuery = isBroad
       ? `(language:indonesian OR language:ind) AND mediatype:(texts)`
       : `(${cleanQ}) AND (language:indonesian OR language:ind) AND mediatype:(texts)`;
+
+    const hasYearFilter = query.yearFrom !== undefined || query.yearTo !== undefined;
+    const yFrom = Number.isInteger(query.yearFrom) ? (query.yearFrom as number) : 1000;
+    const yTo = Number.isInteger(query.yearTo) ? (query.yearTo as number) : 2099;
+    const searchQuery = hasYearFilter ? `${baseQuery} AND year:[${yFrom} TO ${yTo}]` : baseQuery;
 
     const url = new URL('https://archive.org/advancedsearch.php');
     url.searchParams.set('q', searchQuery);
     url.searchParams.set('fl[]', 'identifier,title,creator,year,description,downloads');
-    url.searchParams.set('sort[]', 'downloads desc');
+
+    const sortMap: Record<string, string | undefined> = {
+      popular: 'downloads desc',
+      newest: 'date desc',
+      oldest: 'date asc',
+      title_asc: 'titleSorter asc',
+      title_desc: 'titleSorter desc',
+      relevance: isBroad ? 'downloads desc' : undefined,
+    };
+    const iaSort = sortMap[query.sort || 'relevance'];
+    if (iaSort) {
+      url.searchParams.set('sort[]', iaSort);
+    }
+
     url.searchParams.set('rows', limit.toString());
     url.searchParams.set('page', page.toString());
     url.searchParams.set('output', 'json');

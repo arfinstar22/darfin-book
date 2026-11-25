@@ -268,8 +268,8 @@ export class KemdikbudProvider implements BookProvider {
       q.includes('kurikulum') ||
       q.includes('indonesia');
 
-    const matched = isBroad
-      ? KEMDIKBUD_TEXTBOOKS
+    let matched = isBroad
+      ? [...KEMDIKBUD_TEXTBOOKS]
       : KEMDIKBUD_TEXTBOOKS.filter(
           (b) =>
             b.title.toLowerCase().includes(q) ||
@@ -277,6 +277,23 @@ export class KemdikbudProvider implements BookProvider {
             b.grade.toLowerCase().includes(q) ||
             b.level.toLowerCase().includes(q)
         );
+
+    if (query.yearFrom !== undefined) {
+      matched = matched.filter((b) => b.year >= query.yearFrom!);
+    }
+    if (query.yearTo !== undefined) {
+      matched = matched.filter((b) => b.year <= query.yearTo!);
+    }
+
+    if (query.sort === 'newest') {
+      matched.sort((a, b) => b.year - a.year);
+    } else if (query.sort === 'oldest') {
+      matched.sort((a, b) => a.year - b.year);
+    } else if (query.sort === 'title_asc') {
+      matched.sort((a, b) => a.title.localeCompare(b.title, 'id'));
+    } else if (query.sort === 'title_desc') {
+      matched.sort((a, b) => b.title.localeCompare(a.title, 'id'));
+    }
 
     const offset = query.offset ?? 0;
     const limit = query.limit ?? 30;

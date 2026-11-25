@@ -104,6 +104,29 @@ export interface ReadingProgressItem {
   lastReadAt?: string | null;
 }
 
+export type BookSortOption =
+  | 'relevance'
+  | 'newest'
+  | 'oldest'
+  | 'popular'
+  | 'title_asc'
+  | 'title_desc';
+
+export type BookSourceFilter =
+  | 'all'
+  | 'openlibrary'
+  | 'googlebooks'
+  | 'wikisource'
+  | 'kemdikbud'
+  | 'internetarchive';
+
+export interface CatalogFilterState {
+  sort: BookSortOption;
+  yearFrom?: number;
+  yearTo?: number;
+  source: BookSourceFilter;
+}
+
 export function formatCatalogCount(count: number): string {
   if (!count || count < 1000) return '100.000+';
   const thousands = Math.floor(count / 1000);

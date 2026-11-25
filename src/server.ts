@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { env } from './config/env.js';
 import { initDb } from './db/index.js';
-import type { ProviderBook } from './providers/types.js';
+import type { BookSortOption, BookSourceFilter, ProviderBook } from './providers/types.js';
 import { WikisourceProvider } from './providers/wikisource.js';
 import { ReaderResolverService } from './services/readerResolver.js';
 import { SearchService } from './services/search.js';
@@ -238,13 +238,42 @@ export async function buildServer() {
     };
   });
 
-  // Multi-provider book search
+  // Multi-provider book search with strict sort, year range, and source validation
+  const VALID_SORT_OPTIONS = new Set<BookSortOption>([
+    'relevance',
+    'newest',
+    'oldest',
+    'popular',
+    'title_asc',
+    'title_desc',
+  ]);
+  const VALID_SOURCES = new Set<BookSourceFilter>([
+    'all',
+    'openlibrary',
+    'googlebooks',
+    'wikisource',
+    'kemdikbud',
+    'internetarchive',
+  ]);
+
+  const parseBoundedYear = (raw?: string): number | undefined => {
+    if (!raw) return undefined;
+    const trimmed = raw.trim();
+    if (!/^\d{4}$/.test(trimmed)) return undefined;
+    const year = parseInt(trimmed, 10);
+    return year >= 1000 && year <= 2099 ? year : undefined;
+  };
+
   server.get('/api/v1/search', async (request, reply) => {
     const query = request.query as {
       q?: string;
       limit?: string;
       offset?: string;
       freeOnly?: string;
+      sort?: string;
+      yearFrom?: string;
+      yearTo?: string;
+      source?: string;
     };
 
     if (!query.q || !query.q.trim()) {
@@ -257,14 +286,33 @@ export async function buildServer() {
     const parsedLimit = parseInt(query.limit || '', 10);
     const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 30;
     const parsedOffset = parseInt(query.offset || '', 10);
-    const offset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
+    const offset = Number.isFinite(parsedOffset) ? Math.min(Math.max(parsedOffset, 0), 10000) : 0;
     const freeOnly = query.freeOnly === 'true';
+
+    const sort: BookSortOption =
+      query.sort && VALID_SORT_OPTIONS.has(query.sort as BookSortOption)
+        ? (query.sort as BookSortOption)
+        : 'relevance';
+    const source: BookSourceFilter =
+      query.source && VALID_SOURCES.has(query.source as BookSourceFilter)
+        ? (query.source as BookSourceFilter)
+        : 'all';
+
+    let yearFrom = parseBoundedYear(query.yearFrom);
+    let yearTo = parseBoundedYear(query.yearTo);
+    if (yearFrom !== undefined && yearTo !== undefined && yearFrom > yearTo) {
+      [yearFrom, yearTo] = [yearTo, yearFrom];
+    }
 
     const results = await searchService.search({
       query: sanitizedQuery,
       limit,
       offset,
       freeOnly,
+      sort,
+      yearFrom,
+      yearTo,
+      source,
     });
 
     return results;

@@ -61,6 +61,22 @@ export interface ProviderBook {
   rawMetadata?: Record<string, unknown>;
 }
 
+export type BookSortOption =
+  | 'relevance'
+  | 'newest'
+  | 'oldest'
+  | 'popular'
+  | 'title_asc'
+  | 'title_desc';
+
+export type BookSourceFilter =
+  | 'all'
+  | 'openlibrary'
+  | 'googlebooks'
+  | 'wikisource'
+  | 'kemdikbud'
+  | 'internetarchive';
+
 export interface BookSearchQuery {
   query: string;
   type?: 'all' | 'title' | 'author' | 'isbn' | 'subject';
@@ -68,6 +84,10 @@ export interface BookSearchQuery {
   limit?: number;
   offset?: number;
   freeOnly?: boolean;
+  sort?: BookSortOption;
+  yearFrom?: number;
+  yearTo?: number;
+  source?: BookSourceFilter;
 }
 
 export interface BookProvider {

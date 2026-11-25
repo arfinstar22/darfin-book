@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Bookmark, Trash2, BookOpen, Heart, Sparkles, RotateCw } from 'lucide-react';
-import type { Book, BookmarkItem, UserProfile } from '../types.js';
+import type { Book, BookmarkItem, CatalogFilterState, UserProfile } from '../types.js';
 import { BookCard } from './BookCard.js';
+import { CatalogControls } from './CatalogControls.js';
+import { DEFAULT_CATALOG_FILTER, sortAndFilterBooksLocal } from '../utils/bookSort.js';
 
 interface ShelfViewProps {
   savedBooks: Book[];
@@ -35,10 +37,12 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
   onDeleteBookmark,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'favorites' | 'bookmarks'>('all');
+  const [filterState, setFilterState] = useState<CatalogFilterState>(DEFAULT_CATALOG_FILTER);
 
-  const displayedBooks = activeFilter === 'favorites'
+  const baseBooks = activeFilter === 'favorites'
     ? savedBooks.filter((b) => favoriteIds.includes(`${b.provider}:${b.providerId}`))
     : savedBooks;
+  const displayedBooks = sortAndFilterBooksLocal(baseBooks, filterState);
 
   const isFavorite = (book: Book) => favoriteIds.includes(`${book.provider}:${book.providerId}`);
 
@@ -177,7 +181,15 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
 
       {/* Books Grid */}
       {activeFilter !== 'bookmarks' && (
-        <div>
+        <div className="space-y-5">
+          {baseBooks.length > 0 && (
+            <CatalogControls
+              value={filterState}
+              onChange={setFilterState}
+              showPopularOption={false}
+            />
+          )}
+
           {displayedBooks.length === 0 ? (
             <div className="flex min-h-[40vh] flex-col items-center justify-center p-6 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-stone-100 dark:bg-slate-800 text-stone-400 dark:text-slate-500">
@@ -188,16 +200,29 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
                 )}
               </div>
               <h3 className="mt-4 text-base font-bold text-stone-800 dark:text-slate-200">
-                {activeFilter === 'favorites'
-                  ? 'Belum Ada Buku Favorit'
-                  : 'Rak Buku Masih Kosong'}
+                {baseBooks.length > 0
+                  ? 'Tidak Ada Buku Cocok dengan Filter'
+                  : activeFilter === 'favorites'
+                    ? 'Belum Ada Buku Favorit'
+                    : 'Rak Buku Masih Kosong'}
               </h3>
               <p className="mt-1 max-w-sm text-xs text-stone-500 dark:text-slate-400">
-                {activeFilter === 'favorites'
-                  ? 'Tekan ikon hati pada buku yang Anda sukai untuk menambahkannya ke koleksi favorit.'
-                  : 'Simpan buku pelajaran atau novel favorit Anda untuk membacanya kembali kapan saja.'}
+                {baseBooks.length > 0
+                  ? 'Coba ubah atau reset filter tahun dan sumber untuk melihat buku tersimpan Anda.'
+                  : activeFilter === 'favorites'
+                    ? 'Tekan ikon hati pada buku yang Anda sukai untuk menambahkannya ke koleksi favorit.'
+                    : 'Simpan buku pelajaran atau novel favorit Anda untuk membacanya kembali kapan saja.'}
               </p>
-              {!user && onOpenLogin && (
+              {baseBooks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilterState(DEFAULT_CATALOG_FILTER)}
+                  className="mt-4 min-h-[44px] rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 transition cursor-pointer"
+                >
+                  Reset Filter
+                </button>
+              )}
+              {baseBooks.length === 0 && !user && onOpenLogin && (
                 <button
                   onClick={onOpenLogin}
                   className="mt-4 flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 transition shadow-xs"
