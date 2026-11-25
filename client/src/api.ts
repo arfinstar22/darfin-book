@@ -299,15 +299,23 @@ export async function resolveReader(book: Book): Promise<ReaderResolution> {
   return res.json();
 }
 
-export async function getWikisourceContent(pageId: string): Promise<{
+export async function getWikisourceContent(
+  pageId: string,
+  provider: 'wikisource' | 'wikibooks' = 'wikisource'
+): Promise<{
   title: string;
   html: string;
   licenseNotice: string;
   sourceUrl: string;
 }> {
-  const res = await fetch(`${API_BASE}/wikisource/content/${pageId}`);
+  const endpoint = provider === 'wikibooks' ? 'wikibooks' : 'wikisource';
+  const res = await fetch(`${API_BASE}/${endpoint}/content/${encodeURIComponent(pageId)}`);
   if (!res.ok) {
-    throw new Error('Gagal memuat teks naskah Wikisumber');
+    throw new Error(
+      provider === 'wikibooks'
+        ? 'Gagal memuat teks buku Wikibuku'
+        : 'Gagal memuat teks naskah Wikisumber'
+    );
   }
   return res.json();
 }

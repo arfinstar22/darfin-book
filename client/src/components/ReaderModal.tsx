@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { resolveReader, getWikisourceContent } from '../api.js';
 import { PROVIDER_LABELS, type Book, type ReaderResolution } from '../types.js';
+import { BookOfflineFallbackCard } from './BookOfflineFallbackCard.js';
+import { resolveOfflineActionUrls } from '../utils/bookDownload.js';
 
 interface ReaderModalProps {
   book: Book;
@@ -61,6 +63,11 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [currentPage, setCurrentPage] = useState(0);
   const [pageInput, setPageInput] = useState('1');
   const [imageLoading, setImageLoading] = useState(true);
+  const [pageImageError, setPageImageError] = useState(false);
+  const [imageRetryKey, setImageRetryKey] = useState(0);
+  const [scrollImageErrors, setScrollImageErrors] = useState<Record<number, boolean>>({});
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [forceOfflineFallback, setForceOfflineFallback] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isControlsVisible, setIsControlsVisible] = useState(true);
@@ -265,7 +272,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       setCurrentPage((prev) => prev + 1);
       setFlipDirection(null);
       setIsFlipping(false);
-      setImageLoading(false);
+      setPageImageError(false);
+      setImageLoading(true);
     }, 360);
   };
 
@@ -282,7 +290,8 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       setCurrentPage((prev) => prev - 1);
       setFlipDirection(null);
       setIsFlipping(false);
-      setImageLoading(false);
+      setPageImageError(false);
+      setImageLoading(true);
     }, 360);
   };
 
@@ -535,12 +544,16 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     async function loadReader() {
       setLoading(true);
       setError(null);
+      setPageImageError(false);
+      setScrollImageErrors({});
+      setForceOfflineFallback(false);
       try {
         const res = await resolveReader(book);
 
-        // If Wikisource and contentHtml is not yet loaded, fetch it
+        // If Wikisource/Wikibooks and contentHtml is not yet loaded, fetch it
         if (res.mode === 'WIKISOURCE_TEXT' && !res.contentHtml) {
-          const wikiData = await getWikisourceContent(book.providerId);
+          const wikiProvider = book.provider === 'wikibooks' ? 'wikibooks' : 'wikisource';
+          const wikiData = await getWikisourceContent(book.providerId, wikiProvider);
           res.contentHtml = wikiData.html;
           res.licenseNotice = wikiData.licenseNotice;
           if ((wikiData as unknown as { chapters?: Array<{ id: string; title: string }> }).chapters) {
@@ -569,7 +582,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
       isMounted = false;
       if (tapTimeout.current) clearTimeout(tapTimeout.current);
     };
-  }, [book]);
+  }, [book, reloadNonce]);
 
   const scrollToChapter = (chapterId: string) => {
     const el = document.getElementById(chapterId);
@@ -787,21 +800,16 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         )}
 
         {error && (
-          <div className="mx-auto flex max-w-lg flex-col items-center justify-center p-6 text-center my-auto">
-            <ShieldAlert className="h-12 w-12 text-rose-500" />
-            <h3 className="mt-3 text-base font-bold">Gagal Menampilkan Buku</h3>
-            <p className="mt-1 text-sm opacity-80">{error}</p>
-            {book.sourceUrl && (
-              <a
-                href={book.sourceUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="mt-4 flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 transition"
-              >
-                <span>Buka Langsung di Sumber Resmi</span>
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            )}
+          <div className="flex-1 overflow-y-auto flex items-center justify-center p-2">
+            <BookOfflineFallbackCard
+              book={book}
+              resolution={resolution}
+              errorMessage={error}
+              theme={theme}
+              onRetry={() => setReloadNonce((n) => n + 1)}
+              onBookmark={handleBookmarkClick}
+              bookmarkSaved={bookmarkSavedToast}
+            />
           </div>
         )}
 
@@ -931,28 +939,55 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         )}
 
                         <div className="relative rounded-md overflow-hidden shadow-2xl book-spine-shadow">
-                          <img
-                            key={currentPage}
-                            src={resolution.pageTemplateUrl!.replace(
-                              '{page}',
-                              String(
-                                isFlipping && flipDirection === 'prev' && currentPage > 0
-                                  ? currentPage - 1
-                                  : currentPage
-                              )
-                            )}
-                            alt={`Halaman ${currentPage + 1}`}
-                            onLoad={() => setImageLoading(false)}
-                            onError={() => setImageLoading(false)}
-                            className={`rounded-md object-contain select-none pointer-events-none transition-all duration-200 ${
-                              imageLoading ? 'opacity-30' : 'opacity-100'
-                            } ${
-                              isControlsVisible
-                                ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
-                                : 'max-h-[98vh] w-auto max-w-full'
-                            }`}
-                            draggable={false}
-                          />
+                          {pageImageError ? (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="max-h-[82vh] overflow-y-auto"
+                            >
+                              <BookOfflineFallbackCard
+                                book={book}
+                                resolution={resolution}
+                                theme={theme}
+                                failedPageNumber={currentPage + 1}
+                                onRetry={() => {
+                                  setPageImageError(false);
+                                  setImageLoading(true);
+                                  setImageRetryKey((k) => k + 1);
+                                }}
+                                onBookmark={handleBookmarkClick}
+                                bookmarkSaved={bookmarkSavedToast}
+                              />
+                            </div>
+                          ) : (
+                            <img
+                              key={`${currentPage}-${imageRetryKey}`}
+                              src={resolution.pageTemplateUrl!.replace(
+                                '{page}',
+                                String(
+                                  isFlipping && flipDirection === 'prev' && currentPage > 0
+                                    ? currentPage - 1
+                                    : currentPage
+                                )
+                              )}
+                              alt={`Halaman ${currentPage + 1}`}
+                              onLoad={() => {
+                                setImageLoading(false);
+                                setPageImageError(false);
+                              }}
+                              onError={() => {
+                                setImageLoading(false);
+                                setPageImageError(true);
+                              }}
+                              className={`rounded-md object-contain select-none pointer-events-none transition-all duration-200 ${
+                                imageLoading ? 'opacity-30' : 'opacity-100'
+                              } ${
+                                isControlsVisible
+                                  ? 'max-h-[82vh] sm:max-h-[86vh] w-auto max-w-full'
+                                  : 'max-h-[98vh] w-auto max-w-full'
+                              }`}
+                              draggable={false}
+                            />
+                          )}
 
                           {/* 3D Paper fold lighting/shadow overlay on turn */}
                           {(isFlipping || (isDragging && Math.abs(dragX) > 10)) && zoomLevel <= 1.05 && (
@@ -986,14 +1021,38 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     >
                       {Array.from({ length: totalPages }, (_, idx) => (
                         <div key={idx} className="w-full flex flex-col items-center">
-                          <div className="relative w-full flex justify-center rounded-xl overflow-hidden shadow-lg border border-black/10 book-spine-shadow">
-                            <img
-                              src={resolution.pageTemplateUrl!.replace('{page}', String(idx))}
-                              alt={`Halaman ${idx + 1}`}
-                              loading="lazy"
-                              className="w-full h-auto object-contain max-h-[96vh]"
-                            />
-                          </div>
+                          {scrollImageErrors[idx] ? (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full max-w-lg"
+                            >
+                              <BookOfflineFallbackCard
+                                book={book}
+                                resolution={resolution}
+                                theme={theme}
+                                failedPageNumber={idx + 1}
+                                onRetry={() => {
+                                  setScrollImageErrors((prev) => ({ ...prev, [idx]: false }));
+                                  setImageRetryKey((k) => k + 1);
+                                }}
+                                onBookmark={handleBookmarkClick}
+                                bookmarkSaved={bookmarkSavedToast}
+                              />
+                            </div>
+                          ) : (
+                            <div className="relative w-full flex justify-center rounded-xl overflow-hidden shadow-lg border border-black/10 book-spine-shadow">
+                              <img
+                                key={`${idx}-${imageRetryKey}`}
+                                src={resolution.pageTemplateUrl!.replace('{page}', String(idx))}
+                                alt={`Halaman ${idx + 1}`}
+                                loading="lazy"
+                                onError={() =>
+                                  setScrollImageErrors((prev) => ({ ...prev, [idx]: true }))
+                                }
+                                className="w-full h-auto object-contain max-h-[96vh]"
+                              />
+                            </div>
+                          )}
                           <span className={`mt-2 text-[11px] font-mono ${themeStyles.tagText}`}>
                             Halaman {idx + 1} dari {totalPages}
                           </span>
@@ -1033,6 +1092,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         max={Math.max(0, totalPages - 1)}
                         value={currentPage}
                         onChange={(e) => {
+                          setPageImageError(false);
                           setImageLoading(true);
                           setCurrentPage(Number(e.target.value));
                         }}
@@ -1053,6 +1113,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                             if (e.key === 'Enter') {
                               const val = parseInt(pageInput, 10);
                               if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                                setPageImageError(false);
                                 setImageLoading(true);
                                 setCurrentPage(val - 1);
                               }
@@ -1130,66 +1191,113 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                     </button>
                   )}
 
-                  {/* Direct PDF Download if available */}
-                  {resolution.pdfUrl && (
-                    <a
-                      href={resolution.pdfUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      download
-                      className="hidden sm:flex items-center gap-1 rounded-lg border border-teal-500/30 bg-teal-50 px-2 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-100 transition ml-1"
-                      title="Unduh File PDF Lengkap"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      <span>PDF</span>
-                    </a>
-                  )}
+                  {/* Direct Download PDF / Offline hub button visible on mobile & desktop */}
+                  {(() => {
+                    const { primaryDownloadUrl, isDirectPdf } = resolveOfflineActionUrls(book, resolution);
+                    if (!primaryDownloadUrl) return null;
+                    return (
+                      <a
+                        href={primaryDownloadUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        download={isDirectPdf ? true : undefined}
+                        className="flex items-center gap-1 rounded-lg border border-teal-500/40 bg-teal-600/15 px-2.5 py-1.5 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:bg-teal-600/25 transition ml-1"
+                        title="Unduh buku untuk dibaca offline"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>{isDirectPdf ? 'PDF' : 'Unduh'}</span>
+                      </a>
+                    );
+                  })()}
                 </div>
               </div>
             ) : (
-              /* 2. Wikisource Clean Text Mode */
-              resolution.mode === 'WIKISOURCE_TEXT' && resolution.contentHtml ? (
-                <div className="p-4 sm:p-8 max-w-4xl mx-auto w-full my-auto">
-                  <article
-                    className={`prose max-w-none transition-all leading-relaxed ${
-                      isSerif ? 'reader-serif' : 'font-sans'
-                    }`}
-                    style={{
-                      fontSize: `${fontSize}px`,
-                      lineHeight: '1.85',
-                    }}
-                  >
-                    <div
-                      dangerouslySetInnerHTML={{ __html: resolution.contentHtml }}
-                      className="space-y-6"
-                    />
+              /* 2. Wikisource / Wikibooks Clean Text Mode */
+              resolution.mode === 'WIKISOURCE_TEXT' ? (
+                resolution.contentHtml ? (
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+                    <div className="max-w-4xl mx-auto w-full">
+                      <article
+                        className={`prose max-w-none transition-all leading-relaxed ${
+                          isSerif ? 'reader-serif' : 'font-sans'
+                        }`}
+                        style={{
+                          fontSize: `${fontSize}px`,
+                          lineHeight: '1.85',
+                        }}
+                      >
+                        <div
+                          dangerouslySetInnerHTML={{ __html: resolution.contentHtml }}
+                          className="space-y-6"
+                        />
 
-                    <footer className="mt-16 border-t border-black/10 pt-6 text-xs opacity-75">
-                      <p className="font-bold text-sm">Informasi Lisensi & Sumber Naskah:</p>
-                      <p className="mt-1">{resolution.licenseNotice}</p>
-                      <p className="mt-1">
-                        Tautan naskah asli:{' '}
-                        <a
-                          href={resolution.launchUrl}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="underline text-teal-600 font-semibold"
-                        >
-                          {book.provider === 'wikibooks'
-                            ? 'Wikibuku Bahasa Indonesia'
-                            : 'Wikisumber Bahasa Indonesia'}
-                        </a>
-                      </p>
-                    </footer>
-                  </article>
-                </div>
+                        <footer className="mt-16 border-t border-black/10 dark:border-white/10 pt-6 text-xs opacity-85 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-sm">Informasi Lisensi &amp; Sumber Naskah:</p>
+                              <p className="mt-1">{resolution.licenseNotice}</p>
+                              <p className="mt-1">
+                                Tautan naskah asli:{' '}
+                                <a
+                                  href={resolution.launchUrl}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  className="underline text-teal-600 dark:text-teal-400 font-semibold"
+                                >
+                                  {book.provider === 'wikibooks'
+                                    ? 'Wikibuku Bahasa Indonesia'
+                                    : 'Wikisumber Bahasa Indonesia'}
+                                </a>
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const safeTitle = book.title.replace(/[&<>"']/g, (ch) =>
+                                  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] || ch)
+                                );
+                                const offlineHtml = `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle} - DARFIN BOOK Offline</title><style>body{font-family:Georgia,serif;max-width:740px;margin:32px auto;padding:0 18px;line-height:1.8;background:#FDFBF7;color:#1A1A1A;}h1,h2{font-family:system-ui,sans-serif;}img{max-width:100%;}</style></head><body><h1>${safeTitle}</h1><hr>${resolution.contentHtml}</body></html>`;
+                                const blob = new Blob([offlineHtml], { type: 'text/html;charset=utf-8' });
+                                const blobUrl = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = blobUrl;
+                                a.download = `${book.title.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 60)}.html`;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                              }}
+                              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700 transition cursor-pointer"
+                            >
+                              <Download className="h-4 w-4" />
+                              <span>Simpan Baca Offline (.html)</span>
+                            </button>
+                          </div>
+                        </footer>
+                      </article>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto flex items-center justify-center p-2">
+                    <BookOfflineFallbackCard
+                      book={book}
+                      resolution={resolution}
+                      errorMessage="Teks naskah tidak dapat diambil dari server Wikimedia saat ini."
+                      theme={theme}
+                      onRetry={() => setReloadNonce((n) => n + 1)}
+                      onBookmark={handleBookmarkClick}
+                      bookmarkSaved={bookmarkSavedToast}
+                    />
+                  </div>
+                )
               ) : (
-                /* 3. Official External Reader / Direct PDF Card (Avoids blocked X-Frame-Options iframes and blank mobile PDF views) */
+                /* 3. Official External Reader / Direct PDF Card */
                 (['kemdikbud', 'brin', 'zenodo', 'repositori', 'openaire', 'storyweaver', 'bloom'].includes(book.provider) ||
                   resolution.launchUrl?.includes('kemendikdasmen.go.id') ||
                   resolution.launchUrl?.includes('kemdikbud.go.id')) ? (
-                  <div className="mx-auto max-w-xl py-8 px-4 my-auto">
-                    <div className="overflow-hidden rounded-3xl border border-black/10 bg-white/90 dark:bg-slate-900/90 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center text-stone-900 dark:text-slate-100">
+                  <div className="flex-1 overflow-y-auto mx-auto max-w-xl py-8 px-4 my-auto flex items-center">
+                    <div className="w-full overflow-hidden rounded-3xl border border-black/10 bg-white/90 dark:bg-slate-900/90 p-6 sm:p-8 shadow-xl backdrop-blur-md text-center text-stone-900 dark:text-slate-100">
                       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 mb-4">
                         <BookOpen className="h-8 w-8" />
                       </div>
@@ -1205,40 +1313,44 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                         Penerbit: {book.publisher || PROVIDER_LABELS[book.provider] || 'Sumber Terbuka Resmi'}
                       </p>
 
-                      <div className="mt-6 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-4 text-left text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                        <p className="font-semibold mb-1">Akses Resmi &amp; Aman (100% Legal &amp; Gratis):</p>
-                        <p>{resolution.explanation}</p>
+                      <div className="mt-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 p-4 text-left text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                        <p className="font-semibold mb-1">Akses Resmi &amp; Saran Baca Offline:</p>
+                        <p>{resolution.explanation} Untuk kenyamanan tanpa hambatan jaringan, unduh file buku dan baca secara offline di perangkat Anda.</p>
                       </div>
 
                       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                        {resolution.launchUrl && /^(https?:\/\/)/i.test(resolution.launchUrl) && (
-                          <a
-                            href={resolution.launchUrl}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-xs font-bold text-white hover:bg-teal-700 shadow-md shadow-teal-600/20 transition"
-                          >
-                            <span>Buka &amp; Baca Naskah Resmi</span>
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        )}
-                        {resolution.pdfUrl &&
-                          resolution.pdfUrl !== resolution.launchUrl &&
-                          /^(https?:\/\/)/i.test(resolution.pdfUrl) && (
+                        {(() => {
+                          const { primaryDownloadUrl, isDirectPdf } = resolveOfflineActionUrls(book, resolution);
+                          return primaryDownloadUrl ? (
                             <a
-                              href={resolution.pdfUrl}
+                              href={primaryDownloadUrl}
                               target="_blank"
                               rel="noreferrer noopener"
-                              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/50 px-5 py-3 text-xs font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition"
+                              download={isDirectPdf ? true : undefined}
+                              className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-xs font-bold text-white hover:bg-teal-700 shadow-md shadow-teal-600/20 transition"
                             >
                               <Download className="h-4 w-4" />
-                              <span>Unduh PDF</span>
+                              <span>{isDirectPdf ? 'Unduh PDF untuk Baca Offline' : 'Buka &amp; Simpan Naskah Resmi'}</span>
+                            </a>
+                          ) : null;
+                        })()}
+                        {resolution.launchUrl &&
+                          resolution.launchUrl !== resolution.pdfUrl &&
+                          /^(https?:\/\/)/i.test(resolution.launchUrl) && (
+                            <a
+                              href={resolution.launchUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/50 px-5 py-3 text-xs font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition"
+                            >
+                              <span>Buka di Sumber Asli</span>
+                              <ExternalLink className="h-4 w-4" />
                             </a>
                           )}
                         <button
                           type="button"
                           onClick={handleBookmarkClick}
-                          className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-semibold hover:bg-stone-50 dark:hover:bg-slate-700 transition text-stone-800 dark:text-slate-100"
+                          className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-xs font-semibold hover:bg-stone-50 dark:hover:bg-slate-700 transition text-stone-800 dark:text-slate-100"
                         >
                           <Bookmark className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                           <span>{bookmarkSavedToast ? 'Tersimpan ke Rak!' : 'Tandai Buku Ini'}</span>
@@ -1246,24 +1358,45 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                       </div>
                     </div>
                   </div>
+                ) : resolution.mode === 'UNAVAILABLE' ||
+                  forceOfflineFallback ||
+                  !resolution.launchUrl ||
+                  !/^(https?:\/\/)/i.test(resolution.launchUrl) ? (
+                  <div className="flex-1 overflow-y-auto flex items-center justify-center p-2">
+                    <BookOfflineFallbackCard
+                      book={book}
+                      resolution={resolution}
+                      errorMessage={resolution.explanation}
+                      theme={theme}
+                      onRetry={() => {
+                        setForceOfflineFallback(false);
+                        setReloadNonce((n) => n + 1);
+                      }}
+                      onBookmark={handleBookmarkClick}
+                      bookmarkSaved={bookmarkSavedToast}
+                    />
+                  </div>
                 ) : (
-                  /* 4. Fullscreen Edge-to-Edge Embedded Frame (Fallback for external embed) */
+                  /* 4. Fullscreen Edge-to-Edge Embedded Frame with Instant Offline Escape Bar */
                   <div className="relative flex-1 w-full h-full bg-black">
-                    {resolution.launchUrl && /^(https?:\/\/)/i.test(resolution.launchUrl) ? (
-                      <iframe
-                        src={resolution.launchUrl}
-                        title={book.title}
-                        className="h-full w-full border-0"
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                        allow="fullscreen; clipboard-write; encrypted-media"
-                        allowFullScreen
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full p-8 text-center text-white">
-                        <ShieldAlert className="h-12 w-12 text-amber-400 mb-3" />
-                        <p className="text-sm font-semibold">Tautan buku eksternal tidak valid atau tidak aman.</p>
-                      </div>
-                    )}
+                    <iframe
+                      src={resolution.launchUrl}
+                      title={book.title}
+                      className="h-full w-full border-0"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                      allow="fullscreen; clipboard-write; encrypted-media"
+                      allowFullScreen
+                    />
+                    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
+                      <button
+                        type="button"
+                        onClick={() => setForceOfflineFallback(true)}
+                        className="flex min-h-[44px] items-center gap-2 rounded-full border border-white/20 bg-slate-900/90 px-4 py-2 text-xs font-bold text-white shadow-xl backdrop-blur-md hover:bg-teal-700 transition cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5 text-teal-400" />
+                        <span>Buku gagal tampil? Unduh &amp; Baca Offline</span>
+                      </button>
+                    </div>
                   </div>
                 )
               )

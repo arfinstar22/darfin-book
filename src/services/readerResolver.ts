@@ -166,9 +166,10 @@ export class ReaderResolverService {
         accessStatus: 'PREVIEW',
         sourceProvider: book.provider,
         launchUrl: access.previewUrl || access.officialItemUrl,
+        pdfUrl: access.downloadUrl,
         explanation: access.explanation,
         canBookmark: false,
-        canDownload: false,
+        canDownload: Boolean(access.downloadUrl || access.canDownload),
       };
     }
 
@@ -178,9 +179,10 @@ export class ReaderResolverService {
       accessStatus: 'METADATA_ONLY',
       sourceProvider: book.provider,
       launchUrl: book.sourceUrl,
+      pdfUrl: access.downloadUrl,
       explanation: access.explanation,
       canBookmark: false,
-      canDownload: false,
+      canDownload: Boolean(access.downloadUrl),
     };
   }
 }
